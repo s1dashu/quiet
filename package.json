@@ -1,0 +1,13 @@
+{
+  "name": "neat-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@earendil-works/pi-ai": "0.79.3",
+    "@earendil-works/pi-coding-agent": "0.79.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0"
+  }
+}
