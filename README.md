@@ -114,19 +114,9 @@ The packaged app embeds Node automatically. End users don't need anything instal
 
 ## Configuration
 
-Quiet works out of the box with sensible defaults. To customize:
+### API Key
 
-### Model settings
-
-Set via environment variables or the in-app Settings panel:
-
-| Variable | Default | Description |
-| --- | --- | --- |
-| `QUIET_MODEL_PROVIDER` | `deepseek` | Model provider |
-| `QUIET_MODEL_ID` | `deepseek-v4-flash` | Model identifier |
-| `QUIET_MODEL_API_KEY` | — | Your API key |
-| `QUIET_THINKING_LEVEL` | `medium` | Thinking depth: `off`, `minimal`, `low`, `medium`, `high`, `xhigh` |
-| `QUIET_LANGUAGE` | `en` | UI language: `en` or `zh` |
+Quiet needs an API key from your model provider to work. Open the Settings panel inside the app, paste your key, and you're done. No config files, no environment variables.
 
 ### Organizing rules
 
