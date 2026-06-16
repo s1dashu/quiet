@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#111016" />
+    <title>Quiet — A calm file organizer for Mac</title>
+    <meta
+      name="description"
+      content="Quiet is a lightweight Mac app that sits in your menu bar and organizes files on your own computer. No cloud, no accounts, no clutter."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero" aria-labelledby="hero-title">
+        <canvas id="silk-canvas" class="silk-canvas" aria-hidden="true"></canvas>
+        <div class="hero-vignette" aria-hidden="true"></div>
+
+        <nav class="top-nav" aria-label="Primary" data-i18n-attr="aria-label:nav.aria">
+          <a class="brand" href="#">
+            <img src="./assets/quiet-icon.png" alt="" />
+            <span>Quiet</span>
+          </a>
+          <div class="nav-links">
+            <a href="#workflow" data-i18n="nav.workflow">How it works</a>
+            <a href="#privacy" data-i18n="nav.privacy">Privacy</a>
+            <a href="#download" data-i18n="nav.download">Download</a>
+          </div>
+          <div class="nav-actions">
+            <button class="language-toggle" type="button" data-language-toggle aria-label="Switch language">
+              <span data-language-label>EN</span>
+            </button>
+            <a
+              class="nav-cta"
+              href="https://github.com/s1dashu/quiet/releases/download/v0.1.0/Quiet.dmg"
+              data-i18n="nav.cta"
+            >Get Quiet</a>
+          </div>
+        </nav>
+
+        <div class="hero-content">
+          <div class="release-pill" aria-label="Product update" data-i18n-attr="aria-label:hero.releaseAria">
+            <span data-i18n="hero.releaseBadge">New</span>
+            <span data-i18n="hero.releaseText">Quiet for macOS menu bar</span>
+          </div>
+
+          <h1 id="hero-title">Quiet</h1>
+          <p class="hero-copy" data-i18n="hero.copy">
+            Quiet is a tiny menu-bar app that tidies your files so you don't have to. Drag anything onto it — it figures out what you dropped, renames the mess, and puts everything where it belongs. All on your Mac.
+          </p>
+
+          <div class="hero-actions">
+            <a
+              class="button button-primary"
+              href="https://github.com/s1dashu/quiet/releases/download/v0.1.0/Quiet.dmg"
+              data-i18n="hero.primaryCta"
+            >Download for Mac</a>
+            <a class="button button-secondary" href="#workflow" data-i18n="hero.secondaryCta">See how it works</a>
+          </div>
+        </div>
+
+        <section class="hero-demo" aria-label="Quiet demo video" data-i18n-attr="aria-label:demo.aria">
+          <div class="video-frame">
+            <video autoplay muted loop playsinline preload="metadata" poster="./assets/quiet-icon.png">
+              <source src="./assets/quiet-demo.mp4" type="video/mp4" />
+            </video>
+          </div>
+        </section>
+      </section>
+
+      <section id="workflow" class="section-band">
+        <div class="section-heading">
+          <span data-i18n="workflow.eyebrow">Your Mac. Your files. No cloud involved.</span>
+          <h2 data-i18n="workflow.title">Drag in clutter. Get back calm.</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <span>01</span>
+            <h3 data-i18n="features.drag.title">Drag in. Stop thinking.</h3>
+            <p data-i18n="features.drag.copy">Drop files, folders, or screenshots onto Quiet's menu-bar icon. It handles the rest — you go back to whatever you were doing.</p>
+          </article>
+          <article>
+            <span>02</span>
+            <h3 data-i18n="features.native.title">Feels built into your Mac</h3>
+            <p data-i18n="features.native.copy">Quiet lives in the menu bar and opens like a system popover. No Electron, no sluggish web wrapper — just a native app that starts up instantly and stays out of your way.</p>
+          </article>
+          <article id="privacy">
+            <span>03</span>
+            <h3 data-i18n="features.local.title">Your files never leave your Mac</h3>
+            <p data-i18n="features.local.copy">Everything happens on your own computer. No sign-up, no cloud storage, no one else's server reading your documents. Your organizing rules are yours to customize and keep.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="download" class="download-band">
+        <div>
+          <span data-i18n="download.eyebrow">Quiet Desktop</span>
+          <h2 data-i18n="download.title">Give your files a calm place to land.</h2>
+        </div>
+        <a
+          class="button button-primary"
+          href="https://github.com/s1dashu/quiet/releases/download/v0.1.0/Quiet.dmg"
+          data-i18n="download.cta"
+        >Download Quiet</a>
+      </section>
+
+    </main>
+
+    <script type="module" src="./silk.js"></script>
+    <script type="module" src="./i18n.js"></script>
+  </body>
+</html>
