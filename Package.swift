@@ -3,12 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "Neat",
+    name: "Quiet",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "neat", targets: ["PiDesktopWidget"])
+        .executable(name: "quiet", targets: ["QuietMenuBar"])
     ],
     dependencies: [
         .package(url: "https://github.com/JakubMazur/lucide-icons-swift.git", from: "1.19.0"),
@@ -16,7 +16,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "PiDesktopWidget",
+            name: "QuietMenuBar",
             dependencies: [
                 .product(name: "LucideIcons", package: "lucide-icons-swift"),
                 .product(name: "MarkdownUI", package: "swift-markdown-ui")

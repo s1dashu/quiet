@@ -1,0 +1,838 @@
+import readline from "node:readline";
+import { randomUUID } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  cpSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { rename } from "node:fs/promises";
+import { createRequire } from "node:module";
+import { dirname, join, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { homedir } from "node:os";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(__dirname, "../../../..");
+const require = createRequire(import.meta.url);
+
+const quietHome = resolve(process.env.QUIET_HOME?.trim() || join(homedir(), ".quiet"));
+const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || join(homedir(), "Documents", "Quiet"));
+const inboxDir = join(quietContentHome, "Inbox");
+const filesDir = join(quietContentHome, "Files");
+const outputDir = join(quietContentHome, "Output");
+const logDir = join(quietHome, "logs");
+const agentDir = join(quietHome, "pi-agent");
+const workspaceDir = join(quietHome, "workspace");
+const memoryPath = join(quietHome, "memory.md");
+const sessionsDir = join(agentDir, "sessions");
+const promptPath = new URL("./quiet-prompt.md", import.meta.url);
+const language = process.env.QUIET_LANGUAGE?.trim() === "zh" ? "zh" : "en";
+const initialSessionMessageLimit = 20;
+const sessionHistoryBatchSize = 10;
+const copy = language === "zh"
+  ? {
+      startupFailed: "agent 启动失败，请检查模型 API Key 或 node_modules",
+      organizeFallback: "请整理这些文件。",
+      organizeInstruction: "你现在是 Quiet 的 pi-coding-agent。请真实使用可用的 pi 工具理解并整理文件。",
+      organizeDoneRule: "整理完成后，用中文简短总结你做了什么；不要提内部日志、manifest 或实现文件。",
+      explainFallback: "请说明你会如何安静处理拖入 Quiet 的文件。",
+      noInboxFiles: "没有文件进入 inbox",
+      taskTitle: "agent 整理任务",
+    }
+  : {
+      startupFailed: "Agent failed to start. Check the model API key or node_modules.",
+      organizeFallback: "Please organize these files.",
+      organizeInstruction: "You are Quiet's pi-coding-agent. Use the available pi tools to understand and organize the files.",
+      organizeDoneRule: "When finished, briefly summarize what you moved and where in English; do not mention internal logs, manifests, or implementation files.",
+      explainFallback: "Explain how you would quietly handle files dropped into Quiet.",
+      noInboxFiles: "No files entered the inbox",
+      taskTitle: "Agent organization task",
+    };
+
+mkdirSync(inboxDir, { recursive: true });
+mkdirSync(filesDir, { recursive: true });
+mkdirSync(outputDir, { recursive: true });
+mkdirSync(logDir, { recursive: true });
+mkdirSync(agentDir, { recursive: true });
+mkdirSync(workspaceDir, { recursive: true });
+
+const defaultMemory = `
+# Quiet Memory
+
+These are user-editable file organizing rules for Quiet.
+
+## Learning User Preferences
+
+- When the user expresses a stable preference for how files should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
+- Only record durable preferences. Do not record one-off instructions unless the user asks you to remember them.
+- Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
+- This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
+
+## Folder Taxonomy
+
+- Images: png, jpg, jpeg, gif, webp, heic, tiff, svg, psd, ai, sketch, fig
+- Documents: pdf, doc, docx, txt, md, rtf, pages, epub
+- Sheets: xls, xlsx, csv, numbers
+- Slides: ppt, pptx, key
+- Archives: zip, rar, 7z, tar, gz, dmg, pkg
+- Code: js, jsx, ts, tsx, mjs, cjs, py, rb, go, rs, swift, java, kt, html, css, json, yaml, yml, toml, sh
+- Audio: mp3, wav, aac, flac, m4a
+- Video: mp4, mov, avi, mkv, webm
+- Folders: directories
+- Other: everything else
+
+## Destination Pattern
+
+\`QUIET_CONTENT_HOME/Files/<category>/<YYYY-MM>/<original-name>\`
+
+## Conversation Style
+
+- Be concise.
+- Tell the user what was moved and where.
+- When a problem occurs, name the failed file and continue with the rest.
+- Do not mention internal logs, manifests, or implementation files unless the user asks.
+`.trim();
+
+const memoryPreferenceGuidance = `
+## Learning User Preferences
+
+- When the user expresses a stable preference for how files should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
+- Only record durable preferences. Do not record one-off instructions unless the user asks you to remember them.
+- Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
+- This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
+`.trim();
+
+function ensureMemoryFile() {
+  if (!existsSync(memoryPath)) {
+    writeFileSync(memoryPath, `${defaultMemory}\n`, "utf8");
+    return;
+  }
+  const memory = readFileSync(memoryPath, "utf8");
+  if (!memory.includes("## Learning User Preferences")) {
+    writeFileSync(memoryPath, `${memory.trim()}\n\n${memoryPreferenceGuidance}\n`, "utf8");
+  }
+}
+
+function buildSystemPrompt() {
+  const basePrompt = existsSync(promptPath) ? readFileSync(promptPath, "utf8") : "";
+  ensureMemoryFile();
+  const memory = readFileSync(memoryPath, "utf8").trim();
+  if (!memory) return basePrompt;
+  return `${basePrompt.trim()}\n\n# User Memory\n\n${memory}\n`;
+}
+
+const systemPrompt = buildSystemPrompt();
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  crlfDelay: Infinity,
+});
+
+let sessionPromise;
+let currentSession;
+let currentHistoryLoadedFromIndex = 0;
+let currentHistoryPath = "";
+let messageQueue = Promise.resolve();
+let currentAssistantId = "";
+let currentThinkingId = "";
+let currentAssistantMessageId = "";
+const toolIdsByProviderId = new Map();
+const toolIdsByContentIndex = new Map();
+const startedToolIds = new Set();
+let fallbackNoticeSent = false;
+
+function emit(event) {
+  process.stdout.write(`${JSON.stringify(event)}\n`);
+}
+
+function displayToolId(providerToolCallId, fallbackId) {
+  if (providerToolCallId && toolIdsByProviderId.has(providerToolCallId)) {
+    return toolIdsByProviderId.get(providerToolCallId);
+  }
+  return providerToolCallId || fallbackId || randomUUID();
+}
+
+function stringifyUnknown(value) {
+  if (value === undefined) return undefined;
+  if (typeof value === "string") return value;
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function isInside(parent, child) {
+  const rel = relative(resolve(parent), resolve(child));
+  return rel === "" || (!rel.startsWith("..") && !rel.startsWith(`${sep}`) && rel !== "..");
+}
+
+function safeName(name) {
+  const cleaned = String(name)
+    .normalize("NFC")
+    .replace(/[/:]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned || "Untitled";
+}
+
+function uniqueDestination(dir, originalName) {
+  mkdirSync(dir, { recursive: true });
+  const ext = originalName.includes(".") ? originalName.slice(originalName.lastIndexOf(".")) : "";
+  const stem = ext ? originalName.slice(0, -ext.length) : originalName;
+  let candidate = join(dir, originalName);
+  let index = 2;
+  while (existsSync(candidate)) {
+    candidate = join(dir, `${stem} ${index}${ext}`);
+    index += 1;
+  }
+  return candidate;
+}
+
+async function movePath(source, destination) {
+  mkdirSync(dirname(destination), { recursive: true });
+  try {
+    await rename(source, destination);
+  } catch (error) {
+    if (error?.code !== "EXDEV") {
+      throw error;
+    }
+    cpSync(source, destination, { recursive: true, preserveTimestamps: true, force: false, errorOnExist: true });
+    rmSync(source, { recursive: true, force: false });
+  }
+}
+
+async function ingestToInbox(paths) {
+  const batchId = new Date().toISOString().replace(/[:.]/g, "-");
+  const batchDir = join(inboxDir, batchId);
+  mkdirSync(batchDir, { recursive: true });
+  const ingested = [];
+  const failed = [];
+
+  for (const path of paths) {
+    const source = resolve(path);
+    try {
+      if (!existsSync(source)) {
+        throw new Error("源文件不存在");
+      }
+      if (isInside(quietHome, source) || isInside(quietContentHome, source)) {
+        throw new Error("文件已经在 Quiet 目录内");
+      }
+      const destination = uniqueDestination(batchDir, safeName(source.split(sep).at(-1)));
+      await movePath(source, destination);
+      ingested.push({
+        originalSource: source,
+        inboxPath: destination,
+        originalName: safeName(source.split(sep).at(-1)),
+      });
+    } catch (error) {
+      failed.push({ source, reason: error?.message ?? String(error) });
+    }
+  }
+
+  return { batchId, batchDir, ingested, failed };
+}
+
+function findPackageEntry(packageName) {
+  try {
+    return require.resolve(packageName);
+  } catch {
+    // Continue to explicit search paths below.
+  }
+
+  const candidates = [
+    join(projectRoot, "node_modules", packageName, "dist", "index.js"),
+    join(__dirname, "..", "node_modules", packageName, "dist", "index.js"),
+    join(__dirname, "..", "..", "node_modules", packageName, "dist", "index.js"),
+    join(process.cwd(), "node_modules", packageName, "dist", "index.js"),
+  ];
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
+async function loadPi() {
+  const entry = findPackageEntry("@earendil-works/pi-coding-agent");
+  if (!entry) {
+    throw new Error("找不到 @earendil-works/pi-coding-agent。请先运行 npm install，或重新打包 Quiet.app。");
+  }
+  return import(pathToFileURL(entry).href);
+}
+
+async function loadPiAi() {
+  const entry = findPackageEntry("@earendil-works/pi-ai");
+  if (!entry) {
+    throw new Error("找不到 @earendil-works/pi-ai。请先运行 npm install，或重新打包 Quiet.app。");
+  }
+  return import(pathToFileURL(entry).href);
+}
+
+function selectModel(modelRegistry) {
+  const provider = process.env.QUIET_MODEL_PROVIDER?.trim() || "deepseek";
+  const modelId = process.env.QUIET_MODEL_ID?.trim() || "deepseek-v4-flash";
+  return modelRegistry.find(provider, modelId) || undefined;
+}
+
+function modelRegistryPayload(modelRegistry, getSupportedThinkingLevels) {
+  const providerModels = new Map();
+  for (const model of modelRegistry.getAll()) {
+    const provider = model.provider?.trim();
+    const modelId = model.id?.trim();
+    if (!provider || !modelId || (Array.isArray(model.input) && !model.input.includes("text"))) {
+      continue;
+    }
+    const providerName = modelRegistry.getProviderDisplayName?.(provider) || provider;
+    const entry = providerModels.get(provider) ?? {
+      id: provider,
+      name: providerName,
+      models: [],
+    };
+    entry.models.push({
+      provider,
+      providerName,
+      modelId,
+      name: model.name || modelId,
+      label: model.name || modelId,
+      input: model.input || [],
+      thinkingLevels: getSupportedThinkingLevels?.(model) || ["off"],
+    });
+    providerModels.set(provider, entry);
+  }
+  return [...providerModels.values()]
+    .map((provider) => ({
+      ...provider,
+      models: provider.models.sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: "base" })),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+}
+
+async function createPiSession({ fresh = false, sessionPath } = {}) {
+  const {
+    AuthStorage,
+    createAgentSession,
+    DefaultResourceLoader,
+    ModelRegistry,
+    SessionManager,
+    SettingsManager,
+  } = await loadPi();
+  const { getSupportedThinkingLevels } = await loadPiAi();
+
+  const authStorage = AuthStorage.create(join(agentDir, "auth.json"));
+  const provider = process.env.QUIET_MODEL_PROVIDER?.trim() || "deepseek";
+  const apiKey = process.env.QUIET_MODEL_API_KEY?.trim();
+  if (apiKey) {
+    authStorage.setRuntimeApiKey(provider, apiKey);
+  }
+  const modelRegistry = ModelRegistry.create(authStorage, join(agentDir, "models.json"));
+  emit({ type: "model_registry", providers: modelRegistryPayload(modelRegistry, getSupportedThinkingLevels), error: modelRegistry.getError?.() });
+  const settingsManager = SettingsManager.create(workspaceDir, agentDir, { projectTrusted: true });
+  settingsManager.applyOverrides({
+    defaultProvider: process.env.QUIET_MODEL_PROVIDER?.trim() || "deepseek",
+    defaultModel: process.env.QUIET_MODEL_ID?.trim() || "deepseek-v4-flash",
+    defaultThinkingLevel: process.env.QUIET_THINKING_LEVEL?.trim() || "medium",
+    defaultProjectTrust: "always",
+  });
+
+  const resourceLoader = new DefaultResourceLoader({
+    cwd: workspaceDir,
+    agentDir,
+    settingsManager,
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noThemes: true,
+    systemPrompt,
+  });
+  await resourceLoader.reload();
+
+  const selectedModel = selectModel(modelRegistry);
+  const { session, modelFallbackMessage } = await createAgentSession({
+    authStorage,
+    cwd: workspaceDir,
+    agentDir,
+    modelRegistry,
+    resourceLoader,
+    sessionManager: sessionPath
+      ? SessionManager.open(sessionPath)
+      : fresh
+        ? SessionManager.create(workspaceDir, sessionsDir)
+        : SessionManager.continueRecent(workspaceDir, sessionsDir),
+    settingsManager,
+    model: selectedModel,
+    thinkingLevel: process.env.QUIET_THINKING_LEVEL?.trim() || "medium",
+  });
+
+  session.setAutoCompactionEnabled?.(true);
+  session.subscribe(translateAgentEvent);
+  currentSession = session;
+  emit({ type: "session_current", path: session.sessionFile, id: session.sessionId });
+  if (modelFallbackMessage) {
+    emit({ type: "status", value: modelFallbackMessage });
+  }
+  return session;
+}
+
+function getPiSession() {
+  sessionPromise ??= createPiSession();
+  return sessionPromise;
+}
+
+async function resetPiSession() {
+  const previousSession = currentSession || (sessionPromise ? await sessionPromise.catch(() => undefined) : undefined);
+  previousSession?.dispose?.();
+  sessionPromise = createPiSession({ fresh: true });
+  const session = await sessionPromise;
+  currentAssistantId = "";
+  currentThinkingId = "";
+  currentAssistantMessageId = "";
+  toolIdsByProviderId.clear();
+  toolIdsByContentIndex.clear();
+  startedToolIds.clear();
+  emit({ type: "session_reset", path: session.sessionFile, id: session.sessionId });
+  await emitSessionList();
+}
+
+function textFromContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((part) => part?.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join("\n")
+    .trim();
+}
+
+function readSessionMessages(sessionPath) {
+  if (!sessionPath || !existsSync(sessionPath)) return [];
+  const lines = readFileSync(sessionPath, "utf8").split("\n");
+  const messages = [];
+  for (const line of lines) {
+    if (!line.trim()) continue;
+    try {
+      const entry = JSON.parse(line);
+      if (entry.type !== "message") continue;
+      const role = entry.message?.role;
+      if (role !== "user" && role !== "assistant") continue;
+      const text = textFromContent(entry.message?.content);
+      if (!text) continue;
+      messages.push({
+        id: entry.id || randomUUID(),
+        role,
+        text,
+      });
+    } catch {
+      // Ignore malformed session entries.
+    }
+  }
+  return messages;
+}
+
+function sliceSessionMessages(messages, start, end) {
+  return messages.slice(start, end).map((message) => ({ ...message }));
+}
+
+async function listSessions() {
+  const { SessionManager } = await loadPi();
+  const sessions = await SessionManager.list(workspaceDir, sessionsDir);
+  return sessions.map((session) => ({
+    id: session.id,
+    path: session.path,
+    title: session.name || session.firstMessage || copy.taskTitle,
+    created: session.created?.toISOString?.() || String(session.created || ""),
+    modified: session.modified?.toISOString?.() || String(session.modified || ""),
+    messageCount: session.messageCount || 0,
+  }));
+}
+
+async function emitSessionList() {
+  emit({
+    type: "session_list",
+    currentPath: currentSession?.sessionFile,
+    sessions: await listSessions(),
+  });
+}
+
+async function openSession(sessionPath) {
+  if (!sessionPath || !isInside(sessionsDir, sessionPath) || !existsSync(sessionPath)) {
+    throw new Error("Session file not found.");
+  }
+  const allMessages = readSessionMessages(sessionPath);
+  const initialStart = Math.max(0, allMessages.length - initialSessionMessageLimit);
+  currentHistoryPath = sessionPath;
+  currentHistoryLoadedFromIndex = initialStart;
+  emit({
+    type: "session_opened",
+    path: sessionPath,
+    id: "",
+    messages: sliceSessionMessages(allMessages, initialStart, allMessages.length),
+    hasMore: initialStart > 0,
+    pending: true,
+  });
+  const previousSession = currentSession || (sessionPromise ? await sessionPromise.catch(() => undefined) : undefined);
+  previousSession?.dispose?.();
+  sessionPromise = createPiSession({ sessionPath });
+  const session = await sessionPromise;
+  currentAssistantId = "";
+  currentThinkingId = "";
+  currentAssistantMessageId = "";
+  toolIdsByProviderId.clear();
+  toolIdsByContentIndex.clear();
+  startedToolIds.clear();
+  emit({
+    type: "session_ready",
+    path: session.sessionFile,
+    id: session.sessionId,
+  });
+  await emitSessionList();
+}
+
+async function loadSessionHistory(sessionPath) {
+  if (!sessionPath || !isInside(sessionsDir, sessionPath) || !existsSync(sessionPath)) {
+    throw new Error("Session file not found.");
+  }
+  if (currentSession?.sessionFile !== sessionPath) return;
+  if (currentHistoryPath !== sessionPath) {
+    currentHistoryPath = sessionPath;
+    currentHistoryLoadedFromIndex = Math.max(0, readSessionMessages(sessionPath).length - initialSessionMessageLimit);
+  }
+  if (currentHistoryLoadedFromIndex <= 0) {
+    emit({
+      type: "session_history_batch",
+      path: sessionPath,
+      messages: [],
+      prepend: true,
+      hasMore: false,
+    });
+    return;
+  }
+  const allMessages = readSessionMessages(sessionPath);
+  const end = Math.min(currentHistoryLoadedFromIndex, allMessages.length);
+  const start = Math.max(0, end - sessionHistoryBatchSize);
+  currentHistoryLoadedFromIndex = start;
+  emit({
+    type: "session_history_batch",
+    path: sessionPath,
+    messages: sliceSessionMessages(allMessages, start, end),
+    prepend: true,
+    hasMore: start > 0,
+  });
+}
+
+async function deleteSession(sessionPath) {
+  if (!sessionPath) return;
+  if (!isInside(sessionsDir, sessionPath)) {
+    throw new Error("Refusing to delete a file outside the Quiet sessions directory.");
+  }
+  const currentPath = currentSession?.sessionFile;
+  const isCurrent = currentPath && resolve(currentPath) === resolve(sessionPath);
+  if (isCurrent) {
+    currentSession?.dispose?.();
+    currentSession = undefined;
+    sessionPromise = undefined;
+  }
+  rmSync(sessionPath, { force: true });
+  emit({ type: "session_deleted", path: sessionPath });
+  if (isCurrent) {
+    await resetPiSession();
+  } else {
+    await emitSessionList();
+  }
+}
+
+function translateAgentEvent(event) {
+  const timestamp = new Date().toISOString();
+
+  if (event.type === "agent_start") {
+    emit({ type: "status", value: "agent 工作中", timestamp });
+    return;
+  }
+  if (event.type === "turn_start") {
+    emit({ type: "status", value: "agent 工作中", timestamp });
+    return;
+  }
+  if (event.type === "agent_end") {
+    emit({ type: "status", value: "agent 工作完成", timestamp });
+    currentAssistantId = "";
+    currentThinkingId = "";
+    currentAssistantMessageId = "";
+    toolIdsByProviderId.clear();
+    toolIdsByContentIndex.clear();
+    startedToolIds.clear();
+    return;
+  }
+  if (event.type === "message_start") {
+    if (event.message?.role === "assistant") {
+      currentAssistantMessageId = event.message.id || "";
+      toolIdsByProviderId.clear();
+      toolIdsByContentIndex.clear();
+      startedToolIds.clear();
+    }
+    return;
+  }
+  if (event.type === "tool_execution_start") {
+    const id = displayToolId(event.toolCallId);
+    if (event.toolCallId) toolIdsByProviderId.set(event.toolCallId, id);
+    if (startedToolIds.has(id)) {
+      emit({
+        type: "tool_update",
+        id,
+        name: event.toolName || "tool",
+        value: event.args,
+        phase: "input",
+        timestamp,
+      });
+    } else {
+      startedToolIds.add(id);
+      emit({
+        type: "tool_start",
+        id,
+        name: event.toolName || "tool",
+        args: event.args,
+        timestamp,
+      });
+    }
+    return;
+  }
+  if (event.type === "tool_execution_update") {
+    emit({
+      type: "tool_update",
+      id: displayToolId(event.toolCallId),
+      name: event.toolName || "tool",
+      value: event.partialResult,
+      timestamp,
+    });
+    return;
+  }
+  if (event.type === "tool_execution_end") {
+    const id = displayToolId(event.toolCallId);
+    emit({
+      type: "tool_end",
+      id,
+      name: event.toolName || "tool",
+      result: event.result,
+      isError: Boolean(event.isError),
+      timestamp,
+    });
+    return;
+  }
+  if (event.type !== "message_update") return;
+
+  const messageEvent = event.assistantMessageEvent;
+  if (!messageEvent) return;
+
+  if (event.message?.role === "assistant" && Array.isArray(event.message.content)) {
+    event.message.content.forEach((part, index) => {
+      if (!part || typeof part !== "object" || part.type !== "toolCall") return;
+      const providerToolCallId = typeof part.id === "string" && part.id ? part.id : undefined;
+      const existingId = toolIdsByContentIndex.get(index);
+      const id = existingId || providerToolCallId || `${currentAssistantMessageId || event.message.id || "tool"}-${index}`;
+      toolIdsByContentIndex.set(index, id);
+      if (providerToolCallId) toolIdsByProviderId.set(providerToolCallId, id);
+
+      const name = typeof part.name === "string" ? part.name : "tool";
+      if (!startedToolIds.has(id)) {
+        startedToolIds.add(id);
+        emit({
+          type: "tool_start",
+          id,
+          name,
+          args: part.arguments,
+          timestamp,
+        });
+        return;
+      }
+      emit({
+        type: "tool_update",
+        id,
+        name,
+        value: part.arguments,
+        phase: "input",
+        timestamp,
+      });
+    });
+  }
+
+  if (messageEvent.type === "text_start") {
+    currentAssistantId = randomUUID();
+    emit({ type: "assistant_start", id: currentAssistantId, timestamp });
+    return;
+  }
+  if (messageEvent.type === "text_delta") {
+    currentAssistantId ||= randomUUID();
+    emit({ type: "assistant_delta", id: currentAssistantId, text: messageEvent.delta || "", timestamp });
+    return;
+  }
+  if (messageEvent.type === "text_end") {
+    currentAssistantId ||= randomUUID();
+    emit({ type: "assistant_done", id: currentAssistantId, timestamp });
+    currentAssistantId = "";
+    return;
+  }
+  if (messageEvent.type === "thinking_start") {
+    currentThinkingId = randomUUID();
+    emit({ type: "thinking_start", id: currentThinkingId, timestamp });
+    return;
+  }
+  if (messageEvent.type === "thinking_delta") {
+    currentThinkingId ||= randomUUID();
+    emit({ type: "thinking_delta", id: currentThinkingId, text: messageEvent.delta || "", timestamp });
+    return;
+  }
+  if (messageEvent.type === "thinking_end") {
+    emit({ type: "thinking_end", id: currentThinkingId, text: messageEvent.content || "", timestamp });
+    currentThinkingId = "";
+  }
+}
+
+function shortStat(path) {
+  try {
+    const stats = statSync(path);
+    return {
+      path,
+      name: path.split(sep).at(-1),
+      kind: stats.isDirectory() ? "directory" : "file",
+      size: stats.size,
+      mtime: stats.mtime.toISOString(),
+    };
+  } catch (error) {
+    return {
+      path,
+      missing: true,
+      error: error?.message ?? String(error),
+    };
+  }
+}
+
+function buildOrganizePrompt(paths, userText) {
+  const fileList = paths.map(shortStat);
+  const rules = language === "zh"
+    ? `硬性规则：
+1. 只处理本次列出的 inbox 文件：${inboxDir}
+2. 请按 ~/.quiet/memory.md 的规则理解用户的偏好并整理。
+3. 必须用 mv 移动，不要复制，不要删除用户文件；成功后 inbox 源路径不应继续存在。
+4. 整理后的文件只能放到 files：${filesDir}
+5. 新建摘要、索引、报告或说明文档只能写到 output：${outputDir}
+6. 按文件名、扩展名和必要内容判断用途，不要只按扩展名机械分类。
+7. ${copy.organizeDoneRule}`
+    : `Hard rules:
+1. Only process the inbox files listed in this task: ${inboxDir}
+2. Follow ~/.quiet/memory.md to understand the user's preferences and organize accordingly.
+3. Move with mv; do not copy or delete user files. After a successful move, the inbox source path should no longer exist.
+4. Organized files must stay under files: ${filesDir}
+5. Write new summaries, indexes, reports, or notes only under output: ${outputDir}
+6. Understand purpose from filenames, extensions, and content when needed; do not classify mechanically by extension only.
+7. ${copy.organizeDoneRule}`;
+  const pendingLabel = language === "zh" ? "待整理文件" : "Files to organize";
+  return `
+${userText || copy.organizeFallback}
+
+${copy.organizeInstruction}
+
+${rules}
+
+Quiet dirs:
+- content root: ${quietContentHome}
+- inbox: ${inboxDir}
+- files: ${filesDir}
+- output: ${outputDir}
+
+${pendingLabel}:
+${JSON.stringify(fileList, null, 2)}
+`.trim();
+}
+
+async function handleUserMessage(message) {
+  const text = String(message.text ?? "").trim();
+  const paths = Array.isArray(message.paths) ? message.paths.map((path) => resolve(String(path))) : [];
+
+  if (paths.length > 0) {
+    emit({ type: "status", value: `正在移入 inbox：${paths.length} 项` });
+    const ingestion = await ingestToInbox(paths);
+    if (ingestion.failed.length > 0) {
+      emit({
+        type: "error",
+        message: `有 ${ingestion.failed.length} 项未能进入 inbox：${ingestion.failed[0].reason}`,
+      });
+    }
+    if (ingestion.ingested.length === 0) {
+      emit({ type: "status", value: copy.noInboxFiles });
+      return;
+    }
+    const inboxPaths = ingestion.ingested.map((item) => item.inboxPath);
+    emit({ type: "status", value: "agent 工作中" });
+    emit({
+      type: "plan",
+      title: copy.taskTitle,
+      items: ingestion.ingested.map((item) => `${item.originalName} -> ~/Documents/Quiet/Inbox -> ~/Documents/Quiet/Files`),
+    });
+    const session = await getPiSession();
+    await session.prompt(buildOrganizePrompt(inboxPaths, text), { source: "interactive" });
+    return;
+  }
+
+  const session = await getPiSession();
+  await session.prompt(text || `${copy.explainFallback} inbox=${inboxDir} files=${filesDir} output=${outputDir}.`, {
+    source: "interactive",
+  });
+}
+
+emit({
+  type: "ready",
+  pid: process.pid,
+  protocol: "quiet-pi-jsonl-v1",
+  app: "quiet",
+  filesRoot: filesDir,
+  inbox: inboxDir,
+  output: outputDir,
+});
+
+void getPiSession().catch((error) => {
+  emit({ type: "error", message: error?.message ?? String(error) });
+  if (!fallbackNoticeSent) {
+    fallbackNoticeSent = true;
+    emit({ type: "status", value: copy.startupFailed });
+  }
+});
+
+rl.on("line", (line) => {
+  if (!line.trim()) return;
+  messageQueue = messageQueue
+    .then(async () => {
+      const message = JSON.parse(line);
+      if (message.type === "user_message") {
+        await handleUserMessage(message);
+        return;
+      }
+      if (message.type === "new_session") {
+        await resetPiSession();
+        return;
+      }
+      if (message.type === "list_sessions") {
+        await emitSessionList();
+        return;
+      }
+      if (message.type === "open_session") {
+        await openSession(String(message.path || ""));
+        return;
+      }
+      if (message.type === "load_session_history") {
+        await loadSessionHistory(String(message.path || ""));
+        return;
+      }
+      if (message.type === "delete_session") {
+        await deleteSession(String(message.path || ""));
+        return;
+      }
+      emit({ type: "error", message: `Unknown message type: ${message.type}` });
+    })
+    .catch((error) => {
+      emit({ type: "error", message: error?.message ?? String(error) });
+    });
+});
+
+process.on("SIGTERM", () => {
+  emit({ type: "status", value: "agent stopping" });
+  process.exit(0);
+});
