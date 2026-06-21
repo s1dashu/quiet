@@ -1599,7 +1599,7 @@ struct QuietView: View {
                     SessionOverlayPanel(
                         sessions: store.sessions,
                         currentSessionPath: store.currentSessionPath,
-                        topContentInset: 96,
+                        topContentInset: 76,
                         onSelect: { session in
                             store.openSession(session)
                             withAnimation(.easeInOut(duration: 0.18)) {
