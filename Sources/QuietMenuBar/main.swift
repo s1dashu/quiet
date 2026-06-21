@@ -2432,6 +2432,8 @@ private enum SettingsFocusTarget: Hashable {
     case apiKey
 }
 
+private let settingsBottomAnchorId = "settings-bottom-anchor"
+
 struct SettingsPanel: View {
     @ObservedObject var store: AgentStore
     let focusApiKeyRequest: Int
@@ -2484,71 +2486,78 @@ struct SettingsPanel: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
 
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 12) {
-                    rulesSection(copy: copy)
+            ScrollViewReader { proxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        rulesSection(copy: copy)
 
-                    SettingsPickerField(title: copy.language, selection: $language, options: QuietLanguage.allCases.map { (value: $0.rawValue, label: $0.label) })
-                        .onChange(of: language) { _, _ in
-                            store.language = QuietLanguage.normalized(language).rawValue
+                        SettingsPickerField(title: copy.language, selection: $language, options: QuietLanguage.allCases.map { (value: $0.rawValue, label: $0.label) })
+                            .onChange(of: language) { _, _ in
+                                store.language = QuietLanguage.normalized(language).rawValue
+                            }
+
+                        SettingsPickerField(title: copy.appearance, selection: $appearance, options: appearanceOptions(copy: copy))
+                            .onChange(of: appearance) { _, nextAppearance in
+                                store.applyAppearanceMode(QuietAppearanceMode.normalized(nextAppearance))
+                            }
+
+                        SettingsPickerField(
+                            title: copy.provider,
+                            selection: $provider,
+                            options: providerOptions.map { (value: $0.id, label: $0.name) }
+                        )
+                        .onChange(of: provider) { _, nextProvider in
+                            let nextModels = providerOptions.first(where: { $0.id == nextProvider })?.models ?? []
+                            model = nextModels.first?.modelId ?? model
+                            thinking = closestThinkingLevel(to: thinking, in: nextModels.first?.thinkingLevels ?? ["off"])
                         }
 
-                    SettingsPickerField(title: copy.appearance, selection: $appearance, options: appearanceOptions(copy: copy))
-                        .onChange(of: appearance) { _, nextAppearance in
-                            store.applyAppearanceMode(QuietAppearanceMode.normalized(nextAppearance))
+                        SettingsPickerField(
+                            title: copy.model,
+                            selection: $model,
+                            options: modelOptions.isEmpty ? [(value: model, label: model)] : modelOptions.map { (value: $0.modelId, label: $0.label) }
+                        )
+                        .onChange(of: model) { _, nextModel in
+                            let nextLevels = modelOptions.first(where: { $0.modelId == nextModel })?.thinkingLevels ?? ["off"]
+                            thinking = closestThinkingLevel(to: thinking, in: nextLevels)
                         }
 
-                    SettingsPickerField(
-                        title: copy.provider,
-                        selection: $provider,
-                        options: providerOptions.map { (value: $0.id, label: $0.name) }
-                    )
-                    .onChange(of: provider) { _, nextProvider in
-                        let nextModels = providerOptions.first(where: { $0.id == nextProvider })?.models ?? []
-                        model = nextModels.first?.modelId ?? model
-                        thinking = closestThinkingLevel(to: thinking, in: nextModels.first?.thinkingLevels ?? ["off"])
+                        apiKeyField(copy: copy)
+                        SettingsPickerField(title: copy.thinking, selection: $thinking, options: thinkingOptions)
+
+                        Button {
+                            store.saveSettings(language: language, provider: provider, model: model, apiKey: apiKey, thinking: thinking, appearance: appearance)
+                            onClose()
+                        } label: {
+                            Text(copy.saveAndRestart)
+                                .font(.system(size: 12, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 9)
+                                .foregroundStyle(quietPrimaryText)
+                                .background(quietPrimaryFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+
+                        Color.clear
+                            .frame(height: 1)
+                            .id(settingsBottomAnchorId)
                     }
-
-                    SettingsPickerField(
-                        title: copy.model,
-                        selection: $model,
-                        options: modelOptions.isEmpty ? [(value: model, label: model)] : modelOptions.map { (value: $0.modelId, label: $0.label) }
-                    )
-                    .onChange(of: model) { _, nextModel in
-                        let nextLevels = modelOptions.first(where: { $0.modelId == nextModel })?.thinkingLevels ?? ["off"]
-                        thinking = closestThinkingLevel(to: thinking, in: nextLevels)
-                    }
-
-                    apiKeyField(copy: copy)
-                    SettingsPickerField(title: copy.thinking, selection: $thinking, options: thinkingOptions)
-
-                    Button {
-                        store.saveSettings(language: language, provider: provider, model: model, apiKey: apiKey, thinking: thinking, appearance: appearance)
-                        onClose()
-                    } label: {
-                        Text(copy.saveAndRestart)
-                            .font(.system(size: 12, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .padding(.vertical, 9)
-                            .foregroundStyle(quietPrimaryText)
-                            .background(quietPrimaryFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    }
-                    .buttonStyle(.plain)
-
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 16)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 16)
+                .onAppear {
+                    focusApiKeyIfRequested(proxy: proxy)
+                }
+                .onChange(of: focusApiKeyRequest) { _, _ in
+                    focusApiKeyIfRequested(proxy: proxy)
+                }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color.clear)
         .onAppear {
             thinking = closestThinkingLevel(to: thinking, in: selectedModel?.thinkingLevels ?? ["off"])
-            focusApiKeyIfRequested()
-        }
-        .onChange(of: focusApiKeyRequest) { _, _ in
-            focusApiKeyIfRequested()
         }
         .onChange(of: store.modelProviders) { _, _ in
             let refreshedProviderOptions = resolvedProviderOptions
@@ -2566,10 +2575,22 @@ struct SettingsPanel: View {
         }
     }
 
-    private func focusApiKeyIfRequested() {
+    private func focusApiKeyIfRequested(proxy: ScrollViewProxy) {
         guard focusApiKeyRequest > 0 else { return }
         DispatchQueue.main.async {
             focusedField = .apiKey
+            scrollSettingsToBottom(proxy: proxy)
+        }
+        DispatchQueue.main.async {
+            scrollSettingsToBottom(proxy: proxy)
+        }
+    }
+
+    private func scrollSettingsToBottom(proxy: ScrollViewProxy) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo(settingsBottomAnchorId, anchor: .bottom)
         }
     }
 
