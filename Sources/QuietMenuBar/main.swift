@@ -1985,7 +1985,9 @@ struct QuietView: View {
             Capsule()
                 .stroke(isInputFocused ? quietChatText.opacity(0.18) : quietHairline, lineWidth: 0.8)
         }
-        .padding(12)
+        .padding(.horizontal, 8)
+        .padding(.top, 8)
+        .padding(.bottom, 6)
         .background(Color(nsColor: blackholeWindowFill))
     }
 
