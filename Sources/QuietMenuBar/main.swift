@@ -2045,6 +2045,33 @@ struct CredentialPromptOverlay: View {
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("需要 API Key")
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(quietChatText)
+                        Text("请先选择模型并填入 API Key，保存后即可使用 Blackhole。")
+                            .font(.system(size: 11))
+                            .foregroundStyle(quietSubtleText)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 8)
+
+                    Button(action: onSaved) {
+                        LucideIcon(id: "x", fallbackSystemName: "xmark")
+                            .frame(width: 12, height: 12)
+                            .foregroundStyle(quietChatText.opacity(0.84))
+                            .frame(width: 28, height: 28)
+                            .background(quietSelectedFill, in: Circle())
+                            .overlay {
+                                Circle().stroke(quietHairline, lineWidth: 0.6)
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .help("关闭")
+                }
+
                 SettingsPickerField(
                     title: store.copy.provider,
                     selection: $provider,
