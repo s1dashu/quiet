@@ -248,6 +248,9 @@ struct QuietCopy {
     let editQuietRules: String
     let quietRulesHelp: String
     let saveAndRestart: String
+    let newSession: String
+    let moreActions: String
+    let openFiles: String
     let quit: String
     let composerPlaceholder: String
     let dropOverlay: String
@@ -291,6 +294,9 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             editQuietRules: "Edit resource organizing rules",
             quietRulesHelp: "Open ~/.blackhole/memory.md. Restart the agent after saving.",
             saveAndRestart: "Save and restart agent",
+            newSession: "New session",
+            moreActions: "More actions",
+            openFiles: "Open files",
             quit: "Quit Blackhole",
             composerPlaceholder: "Paste links, snippets, or type a message...",
             dropOverlay: "Release to capture resources",
@@ -331,6 +337,9 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             editQuietRules: "编辑资源整理规则",
             quietRulesHelp: "打开 ~/.blackhole/memory.md，保存后重启 agent 生效",
             saveAndRestart: "保存并重启 agent",
+            newSession: "新建会话",
+            moreActions: "更多操作",
+            openFiles: "打开文件夹",
             quit: "退出 Blackhole",
             composerPlaceholder: "粘贴链接、片段，或输入消息...",
             dropOverlay: "松手捕获资源",
@@ -1713,6 +1722,12 @@ struct QuietView: View {
                                     proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
                                 }
                             }
+                            .onChange(of: store.messages) { _, _ in
+                                guard isFollowingLatest else { return }
+                                withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
+                                    proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+                                }
+                            }
                             .onChange(of: store.showTurnWaitIndicator) { _, isVisible in
                                 guard isFollowingLatest, isVisible else { return }
                                 withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
@@ -1735,26 +1750,31 @@ struct QuietView: View {
                             }
 
                             if showFollowButton {
-                                Button {
-                                    isFollowingLatest = true
-                                    showFollowButton = false
-                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                        proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+                                HStack {
+                                    Spacer(minLength: 0)
+                                    Button {
+                                        isFollowingLatest = true
+                                        showFollowButton = false
+                                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                                            proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+                                        }
+                                    } label: {
+                                        LucideIcon(id: "arrow-down", fallbackSystemName: "arrow.down")
+                                            .frame(width: 15, height: 15)
+                                            .frame(width: 30, height: 30)
+                                            .foregroundStyle(quietPrimaryText)
+                                            .background(quietPrimaryFill, in: Circle())
+                                            .overlay {
+                                                Circle().stroke(quietHairline, lineWidth: 0.6)
+                                            }
+                                            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 5)
                                     }
-                                } label: {
-                                    LucideIcon(id: "arrow-down", fallbackSystemName: "arrow.down")
-                                        .frame(width: 15, height: 15)
-                                        .frame(width: 34, height: 34)
-                                    .foregroundStyle(quietChatText)
-                                    .background(quietSelectedFill, in: Circle())
-                                    .overlay {
-                                        Circle().stroke(quietHairline, lineWidth: 0.6)
-                                    }
-                                    .shadow(color: .black.opacity(0.07), radius: 12, x: 0, y: 5)
+                                    .buttonStyle(.plain)
+                                    .help("跟随到最新")
+                                    Spacer(minLength: 0)
                                 }
-                                .buttonStyle(.plain)
-                                .help("跟随到最新")
-                                .padding(.bottom, 8)
+                                .frame(maxWidth: .infinity)
+                                .padding(.bottom, 10)
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
                             }
                         }
@@ -1793,7 +1813,12 @@ struct QuietView: View {
             }
         }
         .onPreferenceChange(ScrollContentHeightPreferenceKey.self) { height in
+            let previousHeight = scrollContentHeight
             scrollContentHeight = max(1, height)
+            if isFollowingLatest, height >= previousHeight {
+                showFollowButton = false
+                return
+            }
             updateFollowState(offset: scrollOffset, contentHeight: max(1, height), viewportHeight: scrollViewportHeight)
         }
         .animation(.easeOut(duration: 0.14), value: isDropTargeted)
@@ -1864,23 +1889,37 @@ struct QuietView: View {
                 GlassIconButtonLabel(iconId: "plus", fallbackSystemName: "plus", size: 30, iconSize: 15)
             }
             .buttonStyle(.plain)
-            .help("新建会话")
+            .help(store.copy.newSession)
 
-            Button {
-                store.openFiles()
+            Menu {
+                Button {
+                    store.openFiles()
+                } label: {
+                    Label(store.copy.openFiles, systemImage: "folder")
+                }
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        isSettingsPresented = true
+                    }
+                } label: {
+                    Label(store.copy.settingsTitle, systemImage: "gearshape")
+                }
+
+                Divider()
+
+                Button {
+                    NSApp.terminate(nil)
+                } label: {
+                    Label(store.copy.quit, systemImage: "power")
+                }
             } label: {
-                GlassIconButtonLabel(iconId: "folder", fallbackSystemName: "folder", size: 30, iconSize: 14)
+                GlassIconButtonLabel(iconId: "ellipsis", fallbackSystemName: "ellipsis", size: 30, iconSize: 15)
             }
+            .menuStyle(.button)
+            .menuIndicator(.hidden)
             .buttonStyle(.plain)
-
-            Button {
-                withAnimation(.easeInOut(duration: 0.18)) {
-                    isSettingsPresented = true
-                }
-            } label: {
-                GlassIconButtonLabel(iconId: "settings", fallbackSystemName: "gearshape", size: 30, iconSize: 14)
-                }
-            .buttonStyle(.plain)
+            .help(store.copy.moreActions)
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -2481,30 +2520,6 @@ struct SettingsPanel: View {
                     }
                     .buttonStyle(.plain)
 
-                    Divider()
-                        .opacity(0.22)
-                        .padding(.vertical, 4)
-
-                    Button {
-                        NSApp.terminate(nil)
-                    } label: {
-                        HStack {
-                            LucideIcon(id: "power", fallbackSystemName: "power")
-                                .frame(width: 14, height: 14)
-                            Text(copy.quit)
-                                .font(.system(size: 12, weight: .semibold))
-                            Spacer()
-                        }
-                        .foregroundStyle(.white.opacity(0.84))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                        .background(quietSettingsControlFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .stroke(quietSettingsControlBorder, lineWidth: 0.6)
-                        }
-                    }
-                    .buttonStyle(.plain)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
