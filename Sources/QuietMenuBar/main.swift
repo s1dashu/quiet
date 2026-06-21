@@ -1586,7 +1586,7 @@ struct QuietView: View {
 
     private var chatPage: some View {
         GeometryReader { geometry in
-            ZStack(alignment: .leading) {
+            ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
                     header
 
