@@ -31,7 +31,7 @@ const translations = {
       secondaryCta: "See how it works"
     },
     workflow: {
-      eyebrow: "Your Mac. Your files. No cloud involved.",
+      eyebrow: "Your Mac. Your files. No Quiet cloud.",
       title: "Drag in clutter. Get back calm."
     },
     features: {
@@ -44,8 +44,8 @@ const translations = {
         copy: "Quiet lives in the menu bar and opens like a system popover. No Electron, no sluggish web wrapper — just a native app that starts up instantly and stays out of your way."
       },
       local: {
-        title: "Your files never leave your Mac",
-        copy: "Everything happens on your own computer. No sign-up, no cloud storage, no one else's server reading your documents. Your organizing rules are yours to customize and keep."
+        title: "Local files, provider of your choice",
+        copy: "Quiet keeps files, rules, and app data on your Mac. It does not collect telemetry or run a hosted backend; model requests go to the provider you configure."
       }
     },
     download: {
@@ -82,7 +82,7 @@ const translations = {
       secondaryCta: "看看怎么用"
     },
     workflow: {
-      eyebrow: "你的 Mac，你的文件，不依赖任何云端服务。",
+      eyebrow: "你的 Mac，你的文件，没有 Quiet 托管云。",
       title: "拖进去的是杂乱，还给你的是清净。"
     },
     features: {
@@ -95,8 +95,8 @@ const translations = {
         copy: "Quiet 常驻菜单栏，点开就像系统自带弹窗一样轻快。不需要 Electron，也不吃资源——真正的原生应用，秒开秒关。"
       },
       local: {
-        title: "你的文件，不出你的电脑",
-        copy: "所有处理都在本地完成。不需要注册账号，没有云端存储，没有第三方服务器读你的文档。整理规则完全由你自己定义和掌控。"
+        title: "本地文件，自选模型服务",
+        copy: "Quiet 会把文件、规则和应用数据留在你的 Mac 上，不收集遥测，也不运行托管后端；模型请求会发送到你配置的服务商。"
       }
     },
     download: {

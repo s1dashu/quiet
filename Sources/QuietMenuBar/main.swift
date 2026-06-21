@@ -1,6 +1,7 @@
 import AppKit
 import LucideIcons
 import MarkdownUI
+import Security
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -9,10 +10,64 @@ private let quietWindowDefaultSize = NSSize(width: 380, height: 520)
 private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
+private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
 private let quietDropTypeIdentifiers = [
     UTType.fileURL.identifier,
     UTType.url.identifier,
 ]
+
+private enum QuietKeychain {
+    private static let service = "com.sida.quiet"
+    private static let modelApiKeyAccount = "model-api-key"
+
+    static func readModelApiKey() -> String {
+        read(account: modelApiKeyAccount) ?? ""
+    }
+
+    static func saveModelApiKey(_ value: String) {
+        save(value, account: modelApiKeyAccount)
+    }
+
+    private static func read(account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        guard status == errSecSuccess, let data = item as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private static func save(_ value: String, account: String) {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+        ]
+
+        if value.isEmpty {
+            SecItemDelete(query as CFDictionary)
+            return
+        }
+
+        let data = Data(value.utf8)
+        let update: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
+        ]
+        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if status == errSecItemNotFound {
+            var item = query
+            item[kSecValueData as String] = data
+            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+            SecItemAdd(item as CFDictionary, nil)
+        }
+    }
+}
 private func quietDynamicNSColor(light: NSColor, dark: NSColor) -> NSColor {
     NSColor(name: nil) { appearance in
         let match = appearance.bestMatch(from: [.darkAqua, .aqua])
@@ -511,7 +566,16 @@ final class AgentStore: ObservableObject {
         language = storedLanguage.rawValue
         modelProvider = UserDefaults.standard.string(forKey: "quiet.model.provider") ?? "deepseek"
         modelId = UserDefaults.standard.string(forKey: "quiet.model.id") ?? "deepseek-v4-flash"
-        modelApiKey = UserDefaults.standard.string(forKey: "quiet.model.apiKey") ?? ""
+        let legacyApiKey = UserDefaults.standard.string(forKey: quietLegacyModelApiKeyKey) ?? ""
+        let keychainApiKey = QuietKeychain.readModelApiKey()
+        if keychainApiKey.isEmpty, !legacyApiKey.isEmpty {
+            QuietKeychain.saveModelApiKey(legacyApiKey)
+            UserDefaults.standard.removeObject(forKey: quietLegacyModelApiKeyKey)
+            modelApiKey = legacyApiKey
+        } else {
+            UserDefaults.standard.removeObject(forKey: quietLegacyModelApiKeyKey)
+            modelApiKey = keychainApiKey
+        }
         thinkingLevel = UserDefaults.standard.string(forKey: "quiet.thinking.level") ?? "medium"
         appearanceMode = QuietAppearanceMode.normalized(UserDefaults.standard.string(forKey: quietAppearanceModeKey))
         status = copy.startingStatus
@@ -1111,7 +1175,6 @@ final class AgentStore: ObservableObject {
             "/usr/local/bin",
             "/usr/bin",
             "/bin",
-            "/Users/sida/.local/share/mise/installs/node/lts/bin",
         ]
         let inherited = ProcessInfo.processInfo.environment["PATH"]?
             .split(separator: ":")
@@ -1246,7 +1309,8 @@ final class AgentStore: ObservableObject {
         UserDefaults.standard.set(self.language, forKey: "quiet.language")
         UserDefaults.standard.set(modelProvider, forKey: "quiet.model.provider")
         UserDefaults.standard.set(modelId, forKey: "quiet.model.id")
-        UserDefaults.standard.set(modelApiKey, forKey: "quiet.model.apiKey")
+        QuietKeychain.saveModelApiKey(modelApiKey)
+        UserDefaults.standard.removeObject(forKey: quietLegacyModelApiKeyKey)
         UserDefaults.standard.set(thinkingLevel, forKey: "quiet.thinking.level")
         if shouldRestart {
             restartAgent()

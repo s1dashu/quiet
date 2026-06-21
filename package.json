@@ -3,9 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "audit": "npm audit --omit=dev --registry=https://registry.npmjs.org",
+    "check": "node --check Sources/QuietMenuBar/Resources/pi-agent/server.mjs && swift build && npm run audit",
+    "package": "./scripts/package-quiet-app.sh"
+  },
   "dependencies": {
-    "@earendil-works/pi-ai": "0.79.3",
-    "@earendil-works/pi-coding-agent": "0.79.3"
+    "@earendil-works/pi-ai": "0.79.9",
+    "@earendil-works/pi-coding-agent": "0.79.9"
   },
   "devDependencies": {
     "@types/node": "^24.12.0"
