@@ -68,7 +68,7 @@ If you tell Blackhole "I like links sorted by research topic," it writes that ru
 Drop files, paste links, or paste snippets and go back to your work. Blackhole handles categorization, naming, and placement in the background. No Finder windows, no manual sorting.
 
 ### 🪟 Native macOS experience
-Blackhole isn't a web app in a shell. It's built with Swift, SwiftUI, and AppKit. The menu-bar window uses real system materials (`NSGlassEffectView` / `NSVisualEffectView`), starts with your Mac, and sits at a few megabytes of memory.
+Blackhole isn't a web app in a shell. It's built with Swift, SwiftUI, and AppKit. This experiment uses a solid black native menu-bar window for dependable contrast across wallpapers, starts with your Mac, and sits at a few megabytes of memory.
 
 ### 🔒 Local-first
 Blackhole bundles its own Node runtime so you don't even need Node installed. Resources stay in `~/Documents/Blackhole`, runtime data stays in `~/.blackhole`, and Blackhole does not collect telemetry or analytics.
@@ -139,7 +139,7 @@ Blackhole reads `~/.blackhole/memory.md` for your resource-organizing preference
 
 | Layer | Technology |
 | --- | --- |
-| UI | Swift, SwiftUI, AppKit, `NSGlassEffectView` |
+| UI | Swift, SwiftUI, AppKit, native black menu-bar window |
 | Agent runtime | Bundled Node.js + `@earendil-works/pi-coding-agent` |
 | IPC | JSON Lines over stdin/stdout |
 | File system | `~/Documents/Blackhole` (user resources), `~/.blackhole` (runtime data) |
