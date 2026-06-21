@@ -1987,7 +1987,7 @@ struct QuietView: View {
         }
         .padding(.horizontal, 8)
         .padding(.top, 8)
-        .padding(.bottom, 6)
+        .padding(.bottom, 8)
         .background(Color(nsColor: blackholeWindowFill))
     }
 
@@ -2045,18 +2045,18 @@ struct CredentialPromptOverlay: View {
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
+                ZStack(alignment: .topTrailing) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("需要 API Key")
                             .font(.system(size: 13.5, weight: .semibold))
                             .foregroundStyle(quietChatText)
-                        Text("请先选择模型并填入 API Key，保存后即可使用 Blackhole。")
+                        Text("请选择模型并填入 API Key，保存后即可使用。")
                             .font(.system(size: 11))
                             .foregroundStyle(quietSubtleText)
                             .fixedSize(horizontal: false, vertical: true)
                     }
-
-                    Spacer(minLength: 8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.trailing, 42)
 
                     Button(action: onSaved) {
                         LucideIcon(id: "x", fallbackSystemName: "xmark")
