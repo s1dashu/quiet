@@ -664,6 +664,13 @@ final class AgentStore: ObservableObject {
         lastDroppedPaths = []
     }
 
+    var hasUsableModelCredential: Bool {
+        !modelProvider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !modelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && (!modelApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || !(ProcessInfo.processInfo.environment["QUIET_MODEL_API_KEY"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
     func startNewSession() {
         inputText = ""
         lastDroppedPaths = []
@@ -789,6 +796,8 @@ final class AgentStore: ObservableObject {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
         var environment = ProcessInfo.processInfo.environment
+        let configuredApiKey = modelApiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let inheritedApiKey = (environment["QUIET_MODEL_API_KEY"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         environment.merge([
             "NODE_ENV": environment["NODE_ENV"] ?? "production",
             "QUIET_HOME": applicationSupportDirectory().path,
@@ -796,7 +805,7 @@ final class AgentStore: ObservableObject {
             "QUIET_LANGUAGE": currentLanguage.rawValue,
             "QUIET_MODEL_PROVIDER": modelProvider.trimmingCharacters(in: .whitespacesAndNewlines),
             "QUIET_MODEL_ID": modelId.trimmingCharacters(in: .whitespacesAndNewlines),
-            "QUIET_MODEL_API_KEY": modelApiKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            "QUIET_MODEL_API_KEY": configuredApiKey.isEmpty ? inheritedApiKey : configuredApiKey,
             "QUIET_THINKING_LEVEL": thinkingLevel.trimmingCharacters(in: .whitespacesAndNewlines),
             "PI_AGENT_HOME": applicationSupportDirectory().path,
             "PATH": mergedPath(),
@@ -1545,6 +1554,7 @@ struct QuietView: View {
     @State private var isFollowingLatest = true
     @State private var showFollowButton = false
     @State private var isSettingsPresented = false
+    @State private var settingsApiKeyFocusRequest = 0
     @State private var isDropTargeted = false
     @State private var composerInputHeight: CGFloat = 19
     @State private var isSidebarPresented = false
@@ -1552,7 +1562,7 @@ struct QuietView: View {
     var body: some View {
         Group {
             if isSettingsPresented {
-                SettingsPanel(store: store) {
+                SettingsPanel(store: store, focusApiKeyRequest: settingsApiKeyFocusRequest) {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         isSettingsPresented = false
                     }
@@ -1888,7 +1898,7 @@ struct QuietView: View {
                     store.inputContainsPastedResource = true
                 },
                 onSubmit: {
-                    store.sendCurrentMessage()
+                    submitCurrentMessage()
                 }
             )
                 .frame(height: composerInputHeight)
@@ -1901,7 +1911,7 @@ struct QuietView: View {
                 }
 
             Button {
-                store.sendCurrentMessage()
+                submitCurrentMessage()
             } label: {
                 LucideIcon(id: "arrow-up", fallbackSystemName: "arrow.up")
                     .foregroundStyle(quietPrimaryText)
@@ -1913,6 +1923,17 @@ struct QuietView: View {
         }
         .padding(12)
         .background(Color(nsColor: blackholeWindowFill))
+    }
+
+    private func submitCurrentMessage() {
+        guard store.hasUsableModelCredential else {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                isSettingsPresented = true
+            }
+            settingsApiKeyFocusRequest += 1
+            return
+        }
+        store.sendCurrentMessage()
     }
 }
 
@@ -2353,8 +2374,13 @@ private func addWindowMoveHotZones(to contentView: NSView) {
     ])
 }
 
+private enum SettingsFocusTarget: Hashable {
+    case apiKey
+}
+
 struct SettingsPanel: View {
     @ObservedObject var store: AgentStore
+    let focusApiKeyRequest: Int
     let onClose: () -> Void
 
     @State private var language: String
@@ -2363,9 +2389,11 @@ struct SettingsPanel: View {
     @State private var apiKey: String
     @State private var thinking: String
     @State private var appearance: String
+    @FocusState private var focusedField: SettingsFocusTarget?
 
-    init(store: AgentStore, onClose: @escaping () -> Void) {
+    init(store: AgentStore, focusApiKeyRequest: Int = 0, onClose: @escaping () -> Void) {
         self.store = store
+        self.focusApiKeyRequest = focusApiKeyRequest
         self.onClose = onClose
         _language = State(initialValue: store.language)
         _provider = State(initialValue: store.modelProvider)
@@ -2437,7 +2465,7 @@ struct SettingsPanel: View {
                         thinking = closestThinkingLevel(to: thinking, in: nextLevels)
                     }
 
-                    SettingsField(title: copy.apiKey, text: $apiKey, placeholder: copy.apiKeyPlaceholder, isSecure: true)
+                    apiKeyField(copy: copy)
                     SettingsPickerField(title: copy.thinking, selection: $thinking, options: thinkingOptions)
 
                     Button {
@@ -2487,6 +2515,10 @@ struct SettingsPanel: View {
         .background(Color.clear)
         .onAppear {
             thinking = closestThinkingLevel(to: thinking, in: selectedModel?.thinkingLevels ?? ["off"])
+            focusApiKeyIfRequested()
+        }
+        .onChange(of: focusApiKeyRequest) { _, _ in
+            focusApiKeyIfRequested()
         }
         .onChange(of: store.modelProviders) { _, _ in
             let refreshedProviderOptions = resolvedProviderOptions
@@ -2501,6 +2533,32 @@ struct SettingsPanel: View {
             }
             let refreshedLevels = refreshedModels.first(where: { $0.modelId == model })?.thinkingLevels ?? ["off"]
             thinking = closestThinkingLevel(to: thinking, in: refreshedLevels)
+        }
+    }
+
+    private func focusApiKeyIfRequested() {
+        guard focusApiKeyRequest > 0 else { return }
+        DispatchQueue.main.async {
+            focusedField = .apiKey
+        }
+    }
+
+    private func apiKeyField(copy: QuietCopy) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(copy.apiKey)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(quietSubtleText)
+            SecureField(copy.apiKeyPlaceholder, text: $apiKey)
+                .focused($focusedField, equals: .apiKey)
+                .font(.system(size: 12))
+                .textFieldStyle(.plain)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(quietSettingsControlFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(focusedField == .apiKey ? quietChatText.opacity(0.32) : quietSettingsControlBorder, lineWidth: 0.8)
+                }
         }
     }
 
