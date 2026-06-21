@@ -1606,6 +1606,7 @@ struct QuietView: View {
 
     private var chatPage: some View {
         GeometryReader { geometry in
+            let sidebarWidth = min(224, max(168, geometry.size.width * 0.72))
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
                     Color.clear
@@ -1614,6 +1615,19 @@ struct QuietView: View {
                     messageList
 
                     composer
+                }
+
+                if isSidebarPresented {
+                    Color.black.opacity(0.001)
+                        .contentShape(Rectangle())
+                        .frame(width: max(0, geometry.size.width - sidebarWidth), height: geometry.size.height)
+                        .offset(x: sidebarWidth)
+                        .onTapGesture {
+                            withAnimation(.easeInOut(duration: 0.18)) {
+                                isSidebarPresented = false
+                            }
+                        }
+                        .zIndex(1)
                 }
 
                 if isSidebarPresented {
@@ -1631,7 +1645,7 @@ struct QuietView: View {
                             store.deleteSession(session)
                         }
                     )
-                    .frame(width: min(224, max(168, geometry.size.width * 0.72)))
+                    .frame(width: sidebarWidth)
                     .frame(maxHeight: .infinity)
                     .ignoresSafeArea()
                     .transition(.move(edge: .leading).combined(with: .opacity))
