@@ -1,7 +1,6 @@
 import AppKit
 import LucideIcons
 import MarkdownUI
-import Security
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -19,56 +18,41 @@ private let quietDropTypeIdentifiers = [
     UTType.utf8PlainText.identifier,
 ]
 
-private enum QuietKeychain {
-    private static let service = "com.sida.quiet"
-    private static let modelApiKeyAccount = "model-api-key"
+private enum QuietSecrets {
+    private static let modelApiKeyKey = "modelApiKey"
 
     static func readModelApiKey() -> String {
-        read(account: modelApiKeyAccount) ?? ""
+        guard let data = try? Data(contentsOf: secretsURL()),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let value = object[modelApiKeyKey] as? String else {
+            return ""
+        }
+        return value
     }
 
     static func saveModelApiKey(_ value: String) {
-        save(value, account: modelApiKeyAccount)
-    }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let url = secretsURL()
+        let directory = url.deletingLastPathComponent()
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
-    private static func read(account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        guard status == errSecSuccess, let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
-    }
-
-    private static func save(_ value: String, account: String) {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-        ]
-
-        if value.isEmpty {
-            SecItemDelete(query as CFDictionary)
+        if trimmed.isEmpty {
+            try? FileManager.default.removeItem(at: url)
             return
         }
 
-        let data = Data(value.utf8)
-        let update: [String: Any] = [
-            kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
-        ]
-        let status = SecItemUpdate(query as CFDictionary, update as CFDictionary)
-        if status == errSecItemNotFound {
-            var item = query
-            item[kSecValueData as String] = data
-            item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-            SecItemAdd(item as CFDictionary, nil)
+        let object: [String: Any] = [modelApiKeyKey: trimmed]
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.prettyPrinted, .sortedKeys]) else {
+            return
         }
+        try? data.write(to: url, options: [.atomic])
+        try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: url.path)
+    }
+
+    private static func secretsURL() -> URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".blackhole", isDirectory: true)
+            .appendingPathComponent("secrets.json", isDirectory: false)
     }
 }
 private func quietDynamicNSColor(light: NSColor, dark: NSColor) -> NSColor {
@@ -633,14 +617,14 @@ final class AgentStore: ObservableObject {
         modelProvider = UserDefaults.standard.string(forKey: "quiet.model.provider") ?? "deepseek"
         modelId = UserDefaults.standard.string(forKey: "quiet.model.id") ?? "deepseek-v4-flash"
         let legacyApiKey = UserDefaults.standard.string(forKey: quietLegacyModelApiKeyKey) ?? ""
-        let keychainApiKey = QuietKeychain.readModelApiKey()
-        if keychainApiKey.isEmpty, !legacyApiKey.isEmpty {
-            QuietKeychain.saveModelApiKey(legacyApiKey)
+        let secretsApiKey = QuietSecrets.readModelApiKey()
+        if secretsApiKey.isEmpty, !legacyApiKey.isEmpty {
+            QuietSecrets.saveModelApiKey(legacyApiKey)
             UserDefaults.standard.removeObject(forKey: quietLegacyModelApiKeyKey)
             modelApiKey = legacyApiKey
         } else {
             UserDefaults.standard.removeObject(forKey: quietLegacyModelApiKeyKey)
-            modelApiKey = keychainApiKey
+            modelApiKey = secretsApiKey
         }
         thinkingLevel = UserDefaults.standard.string(forKey: "quiet.thinking.level") ?? "medium"
         appearanceMode = QuietAppearanceMode.normalized(UserDefaults.standard.string(forKey: quietAppearanceModeKey))
@@ -1406,7 +1390,7 @@ final class AgentStore: ObservableObject {
         UserDefaults.standard.set(self.language, forKey: "quiet.language")
         UserDefaults.standard.set(modelProvider, forKey: "quiet.model.provider")
         UserDefaults.standard.set(modelId, forKey: "quiet.model.id")
-        QuietKeychain.saveModelApiKey(modelApiKey)
+        QuietSecrets.saveModelApiKey(modelApiKey)
         UserDefaults.standard.removeObject(forKey: quietLegacyModelApiKeyKey)
         UserDefaults.standard.set(thinkingLevel, forKey: "quiet.thinking.level")
         if shouldRestart {
@@ -1564,6 +1548,7 @@ struct QuietView: View {
     @State private var showFollowButton = false
     @State private var isSettingsPresented = false
     @State private var settingsApiKeyFocusRequest = 0
+    @State private var showCredentialPrompt = false
     @State private var isDropTargeted = false
     @State private var composerInputHeight: CGFloat = 19
     @State private var isSidebarPresented = false
@@ -1588,6 +1573,17 @@ struct QuietView: View {
                 FileDropTargetOverlay(text: store.copy.dropOverlay)
                     .padding(10)
                     .transition(.opacity.combined(with: .scale(scale: 0.985)))
+            }
+        }
+        .overlay {
+            if showCredentialPrompt {
+                CredentialPromptOverlay(store: store) {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        showCredentialPrompt = false
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                .zIndex(10)
             }
         }
         .background(Color(nsColor: blackholeWindowFill))
@@ -1996,9 +1992,8 @@ struct QuietView: View {
     private func submitCurrentMessage() {
         guard store.hasUsableModelCredential else {
             withAnimation(.easeInOut(duration: 0.18)) {
-                isSettingsPresented = true
+                showCredentialPrompt = true
             }
-            settingsApiKeyFocusRequest += 1
             return
         }
         store.sendCurrentMessage()
@@ -2029,6 +2024,170 @@ struct FileDropTargetOverlay: View {
         }
         .shadow(color: .black.opacity(0.08), radius: 16, x: 0, y: 8)
         .allowsHitTesting(false)
+    }
+}
+
+struct CredentialPromptOverlay: View {
+    @ObservedObject var store: AgentStore
+    let onSaved: () -> Void
+
+    @State private var provider = "deepseek"
+    @State private var model = "deepseek-v4-flash"
+    @State private var apiKey = ""
+    @State private var thinking = "off"
+    @FocusState private var isApiKeyFocused: Bool
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.52)
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 14) {
+                SettingsPickerField(
+                    title: store.copy.provider,
+                    selection: $provider,
+                    options: providerOptions.map { (value: $0.id, label: $0.name) }
+                )
+                .onChange(of: provider) { _, nextProvider in
+                    let nextModels = providerOptions.first(where: { $0.id == nextProvider })?.models ?? []
+                    model = nextModels.first?.modelId ?? "deepseek-v4-flash"
+                    thinking = closestThinkingLevel(to: thinking, in: nextModels.first?.thinkingLevels ?? ["off"])
+                }
+
+                SettingsPickerField(
+                    title: store.copy.model,
+                    selection: $model,
+                    options: modelOptions.map { (value: $0.modelId, label: $0.label) }
+                )
+                .onChange(of: model) { _, nextModel in
+                    let nextLevels = modelOptions.first(where: { $0.modelId == nextModel })?.thinkingLevels ?? ["off"]
+                    thinking = closestThinkingLevel(to: thinking, in: nextLevels)
+                }
+
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(store.copy.apiKey)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(quietSubtleText)
+                    SecureField(store.copy.apiKeyPlaceholder, text: $apiKey)
+                        .focused($isApiKeyFocused)
+                        .font(.system(size: 12))
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 8)
+                        .background(quietSettingsControlFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(isApiKeyFocused ? quietChatText.opacity(0.32) : quietSettingsControlBorder, lineWidth: 0.8)
+                        }
+                }
+
+                SettingsPickerField(title: store.copy.thinking, selection: $thinking, options: thinkingOptions)
+
+                Button {
+                    store.saveSettings(
+                        language: store.language,
+                        provider: provider,
+                        model: model,
+                        apiKey: apiKey,
+                        thinking: thinking,
+                        appearance: store.appearanceMode.rawValue
+                    )
+                    onSaved()
+                } label: {
+                    Text("保存")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                        .foregroundStyle(quietPrimaryText)
+                        .background(quietPrimaryFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .disabled(!canSave)
+                .opacity(canSave ? 1 : 0.48)
+            }
+            .padding(18)
+            .frame(maxWidth: 360)
+            .background(Color(nsColor: blackholeWindowFill), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color(nsColor: blackholeBorder), lineWidth: 0.8)
+            }
+            .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 12)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onAppear {
+            normalizeInitialSelection()
+            DispatchQueue.main.async {
+                isApiKeyFocused = true
+            }
+        }
+        .onChange(of: store.modelProviders) { _, _ in
+            normalizeInitialSelection()
+        }
+    }
+
+    private var canSave: Bool {
+        !provider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var providerOptions: [ModelProviderOption] {
+        let loaded = store.modelProviders.filter { !$0.models.isEmpty }
+        guard !loaded.isEmpty else { return [fallbackProvider] }
+        if loaded.contains(where: { $0.id == provider }) {
+            return loaded
+        }
+        return [fallbackProvider] + loaded
+    }
+
+    private var modelOptions: [AvailableModel] {
+        let models = providerOptions.first(where: { $0.id == provider })?.models ?? fallbackProvider.models
+        return models.isEmpty ? fallbackProvider.models : models
+    }
+
+    private var thinkingOptions: [(value: String, label: String)] {
+        let levels = modelOptions.first(where: { $0.modelId == model })?.thinkingLevels ?? ["off"]
+        return levels.map { (value: $0, label: thinkingLevelLabel($0)) }
+    }
+
+    private var fallbackProvider: ModelProviderOption {
+        ModelProviderOption(
+            id: "deepseek",
+            name: "DeepSeek",
+            models: [
+                AvailableModel(
+                    id: "deepseek/deepseek-v4-flash",
+                    provider: "deepseek",
+                    modelId: "deepseek-v4-flash",
+                    name: "DeepSeek V4 Flash",
+                    label: "DeepSeek V4 Flash",
+                    thinkingLevels: ["off", "minimal", "low", "medium", "high"]
+                )
+            ]
+        )
+    }
+
+    private func normalizeInitialSelection() {
+        if !providerOptions.contains(where: { $0.id == provider }) {
+            provider = "deepseek"
+        }
+        if !modelOptions.contains(where: { $0.modelId == model }) {
+            model = modelOptions.first?.modelId ?? "deepseek-v4-flash"
+        }
+        thinking = closestThinkingLevel(to: thinking, in: modelOptions.first(where: { $0.modelId == model })?.thinkingLevels ?? ["off"])
+    }
+
+    private func thinkingLevelLabel(_ level: String) -> String {
+        switch level {
+        case "off": "Off"
+        case "minimal": "Minimal"
+        case "low": "Low"
+        case "medium": "Medium"
+        case "high": "High"
+        case "xhigh": "Extra High"
+        default: level
+        }
     }
 }
 

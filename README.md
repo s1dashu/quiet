@@ -119,7 +119,7 @@ The packaged app embeds Node automatically. End users don't need anything instal
 
 ### API Key
 
-Blackhole needs an API key from your model provider to work. Open the Settings panel inside the app, paste your key, and you're done. The key is stored locally in the macOS Keychain.
+Blackhole needs an API key from your model provider to work. Open the Settings panel inside the app, paste your key, and you're done. The key is stored locally at `~/.blackhole/secrets.json` with user-only file permissions.
 
 ### Organizing rules
 
