@@ -5,7 +5,7 @@ import Security
 import SwiftUI
 import UniformTypeIdentifiers
 
-private let quietAppName = "Quiet"
+private let quietAppName = "Blackhole"
 private let quietWindowDefaultSize = NSSize(width: 380, height: 520)
 private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let messageBottomAnchorId = "message-bottom-anchor"
@@ -14,6 +14,8 @@ private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
 private let quietDropTypeIdentifiers = [
     UTType.fileURL.identifier,
     UTType.url.identifier,
+    UTType.plainText.identifier,
+    UTType.utf8PlainText.identifier,
 ]
 
 private enum QuietKeychain {
@@ -220,8 +222,11 @@ struct QuietCopy {
     let launchFailedPrefix: String
     let agentExitedPrefix: String
     let droppedPrefix: String
+    let capturedPrefix: String
     let noReadableFiles: String
+    let noReadableResources: String
     let autoOrganizeFiles: String
+    let autoOrganizeResources: String
     let settingsTitle: String
     let settingsSubtitle: String
     let language: String
@@ -251,7 +256,7 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
     switch language {
     case .en:
         QuietCopy(
-            initialMessage: "Drag files or folders here. The agent will organize them automatically.",
+            initialMessage: "Drop files, links, or snippets here. The agent will organize them automatically.",
             startingStatus: "Starting",
             connectingStatus: "Connecting agent",
             readyStatus: "Agent ready",
@@ -260,8 +265,11 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             launchFailedPrefix: "Launch failed",
             agentExitedPrefix: "Agent exited",
             droppedPrefix: "Moved in",
-            noReadableFiles: "No readable file paths found. Drop files or folders directly from Finder.",
-            autoOrganizeFiles: "Organize these files",
+            capturedPrefix: "Captured",
+            noReadableFiles: "No readable resources found. Drop files, links, or text snippets.",
+            noReadableResources: "No readable resources found. Drop files, links, or text snippets.",
+            autoOrganizeFiles: "Organize these resources",
+            autoOrganizeResources: "Organize these resources",
             settingsTitle: "Settings",
             settingsSubtitle: "Model and app",
             language: "Language",
@@ -274,21 +282,21 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             appearanceSystem: "Follow System",
             appearanceLight: "Light",
             appearanceDark: "Dark",
-            quietRules: "File organizing rules",
-            editQuietRules: "Edit file organizing rules",
-            quietRulesHelp: "Open ~/.quiet/memory.md. Restart the agent after saving.",
+            quietRules: "Resource organizing rules",
+            editQuietRules: "Edit resource organizing rules",
+            quietRulesHelp: "Open ~/.blackhole/memory.md. Restart the agent after saving.",
             saveAndRestart: "Save and restart agent",
-            quit: "Quit Quiet",
-            composerPlaceholder: "在此处输入消息...",
-            dropOverlay: "Release to move files in",
-            statusTooltip: "\(quietAppName) - drop files to quiet them",
+            quit: "Quit Blackhole",
+            composerPlaceholder: "Paste links, snippets, or type a message...",
+            dropOverlay: "Release to capture resources",
+            statusTooltip: "\(quietAppName) - drop files, links, or snippets",
             unknownError: "Unknown error",
             agentErrorPrefix: "agent error",
             providerUnavailable: "Loading providers..."
         )
     case .zh:
         QuietCopy(
-            initialMessage: "将文件或文件夹拖拽进来，Agent 会自动帮你整理。",
+            initialMessage: "把文件、链接或文本片段丢进来，Agent 会自动帮你整理。",
             startingStatus: "启动中",
             connectingStatus: "连接 agent 中",
             readyStatus: "agent 就绪",
@@ -297,8 +305,11 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             launchFailedPrefix: "启动失败",
             agentExitedPrefix: "agent 已退出",
             droppedPrefix: "已移入",
-            noReadableFiles: "没有读到可处理的文件路径。请从 Finder 直接拖入文件或文件夹。",
-            autoOrganizeFiles: "帮我整理这些文件",
+            capturedPrefix: "已捕获",
+            noReadableFiles: "没有读到可处理的资源。请拖入文件、链接，或粘贴文本片段。",
+            noReadableResources: "没有读到可处理的资源。请拖入文件、链接，或粘贴文本片段。",
+            autoOrganizeFiles: "帮我整理这些资源",
+            autoOrganizeResources: "帮我整理这些资源",
             settingsTitle: "设置",
             settingsSubtitle: "模型与应用",
             language: "语言",
@@ -311,14 +322,14 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             appearanceSystem: "跟随系统",
             appearanceLight: "浅色",
             appearanceDark: "深色",
-            quietRules: "文件整理规则",
-            editQuietRules: "编辑文件整理规则",
-            quietRulesHelp: "打开 ~/.quiet/memory.md，保存后重启 agent 生效",
+            quietRules: "资源整理规则",
+            editQuietRules: "编辑资源整理规则",
+            quietRulesHelp: "打开 ~/.blackhole/memory.md，保存后重启 agent 生效",
             saveAndRestart: "保存并重启 agent",
-            quit: "退出 Quiet",
-            composerPlaceholder: "在此处输入消息...",
-            dropOverlay: "松手移入文件",
-            statusTooltip: "\(quietAppName) - 拖入文件安静处理",
+            quit: "退出 Blackhole",
+            composerPlaceholder: "粘贴链接、片段，或输入消息...",
+            dropOverlay: "松手捕获资源",
+            statusTooltip: "\(quietAppName) - 拖入文件、链接或片段",
             unknownError: "未知错误",
             agentErrorPrefix: "agent error",
             providerUnavailable: "正在加载供应商..."
@@ -367,6 +378,65 @@ private func fileURL(fromDropItem item: NSSecureCoding?) -> URL? {
         }
     }
     return nil
+}
+
+private struct CapturedResource: Equatable {
+    let kind: String
+    let value: String
+
+    var payload: [String: String] {
+        [
+            "kind": kind,
+            "value": value,
+        ]
+    }
+
+    var displayName: String {
+        switch kind {
+        case "link":
+            URL(string: value)?.host(percentEncoded: false) ?? value
+        default:
+            truncateResourceLabel(value)
+        }
+    }
+}
+
+private func capturedResource(from text: String) -> CapturedResource? {
+    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+    if let url = URL(string: trimmed), url.scheme != nil, !url.isFileURL {
+        return CapturedResource(kind: "link", value: trimmed)
+    }
+    return CapturedResource(kind: "text", value: trimmed)
+}
+
+private func capturedResource(fromDropItem item: NSSecureCoding?) -> CapturedResource? {
+    if let url = item as? URL, !url.isFileURL {
+        return CapturedResource(kind: "link", value: url.absoluteString)
+    }
+    if let url = item as? NSURL {
+        let bridged = url as URL
+        if !bridged.isFileURL {
+            return CapturedResource(kind: "link", value: bridged.absoluteString)
+        }
+    }
+    if let text = item as? String {
+        return capturedResource(from: text)
+    }
+    if let data = item as? Data,
+       let text = String(data: data, encoding: .utf8) {
+        return capturedResource(from: text)
+    }
+    return nil
+}
+
+private func truncateResourceLabel(_ value: String, maxLength: Int = 42) -> String {
+    let normalized = value
+        .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+    guard normalized.count > maxLength else { return normalized }
+    let index = normalized.index(normalized.startIndex, offsetBy: maxLength)
+    return "\(normalized[..<index])..."
 }
 
 struct LucideIcon: View {
@@ -510,10 +580,17 @@ struct QuietSessionSummary: Identifiable, Equatable {
 final class DroppedURLCollector: @unchecked Sendable {
     private let lock = NSLock()
     private var urls: [URL] = []
+    private var resources: [CapturedResource] = []
 
     func append(_ url: URL) {
         lock.lock()
         urls.append(url)
+        lock.unlock()
+    }
+
+    fileprivate func append(_ resource: CapturedResource) {
+        lock.lock()
+        resources.append(resource)
         lock.unlock()
     }
 
@@ -522,6 +599,13 @@ final class DroppedURLCollector: @unchecked Sendable {
         let paths = urls.map(\.path).sorted()
         lock.unlock()
         return paths
+    }
+
+    fileprivate func capturedResources() -> [CapturedResource] {
+        lock.lock()
+        let values = resources
+        lock.unlock()
+        return values
     }
 }
 
@@ -534,6 +618,7 @@ final class AgentStore: ObservableObject {
     @Published var isAgentWorking = false
     @Published var showTurnWaitIndicator = false
     @Published var lastDroppedPaths: [String] = []
+    @Published var inputContainsPastedResource = false
     @Published var filesPath = ""
     @Published var language: String
     @Published var modelProvider: String
@@ -595,15 +680,22 @@ final class AgentStore: ObservableObject {
 
     func sendCurrentMessage() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pastedResource = inputContainsPastedResource ? capturedResource(from: text) : nil
         guard !text.isEmpty || !lastDroppedPaths.isEmpty else { return }
         inputText = ""
-        send(text: text, paths: lastDroppedPaths)
+        inputContainsPastedResource = false
+        send(
+            text: pastedResource == nil ? text : copy.autoOrganizeResources,
+            paths: lastDroppedPaths,
+            resources: pastedResource.map { [$0] } ?? []
+        )
         lastDroppedPaths = []
     }
 
     func startNewSession() {
         inputText = ""
         lastDroppedPaths = []
+        inputContainsPastedResource = false
         resetStreamingState()
         status = copy.readyStatus
         messages = [
@@ -629,6 +721,7 @@ final class AgentStore: ObservableObject {
         guard session.path != currentSessionPath else { return }
         inputText = ""
         lastDroppedPaths = []
+        inputContainsPastedResource = false
         resetStreamingState()
         currentSessionPath = session.path
         writeJSONLine(["type": "open_session", "path": session.path])
@@ -656,7 +749,7 @@ final class AgentStore: ObservableObject {
     func handleDrop(providers: [NSItemProvider]) -> Bool {
         let collector = DroppedURLCollector()
         let group = DispatchGroup()
-        var requestedFileURLs = false
+        var requestedResources = false
 
         for provider in providers {
             guard let typeIdentifier = quietDropTypeIdentifiers.first(where: {
@@ -664,31 +757,38 @@ final class AgentStore: ObservableObject {
             }) else {
                 continue
             }
-            requestedFileURLs = true
+            requestedResources = true
             group.enter()
             provider.loadItem(forTypeIdentifier: typeIdentifier, options: nil) { item, _ in
                 defer { group.leave() }
                 if let url = fileURL(fromDropItem: item) {
                     collector.append(url)
+                } else if let resource = capturedResource(fromDropItem: item) {
+                    collector.append(resource)
                 }
             }
         }
 
         group.notify(queue: .main) { [weak self] in
             let paths = collector.paths()
-            guard !paths.isEmpty else {
+            let resources = collector.capturedResources()
+            guard !paths.isEmpty || !resources.isEmpty else {
                 self?.messages.append(ChatMessage(
                     id: UUID().uuidString,
                     role: .system,
-                    text: self?.copy.noReadableFiles ?? "No readable file paths found."
+                    text: self?.copy.noReadableResources ?? "No readable resources found."
                 ))
                 return
             }
             self?.lastDroppedPaths = []
-            self?.send(text: self?.copy.autoOrganizeFiles ?? "Organize these files", paths: paths)
+            self?.send(
+                text: self?.copy.autoOrganizeResources ?? "Organize these resources",
+                paths: paths,
+                resources: resources
+            )
         }
 
-        return requestedFileURLs
+        return requestedResources
     }
 
     private func startAgent() {
@@ -778,10 +878,14 @@ final class AgentStore: ObservableObject {
         }
     }
 
-    private func send(text: String, paths: [String]) {
+    private func send(text: String, paths: [String], resources: [CapturedResource] = []) {
         if !paths.isEmpty {
             let fileText = paths.map { URL(fileURLWithPath: $0).lastPathComponent }.joined(separator: "、")
             messages.append(ChatMessage(id: UUID().uuidString, role: .system, text: "\(copy.droppedPrefix): \(fileText)"))
+        }
+        if !resources.isEmpty {
+            let resourceText = resources.map(\.displayName).joined(separator: "、")
+            messages.append(ChatMessage(id: UUID().uuidString, role: .system, text: "\(copy.capturedPrefix): \(resourceText)"))
         }
         if !text.isEmpty {
             messages.append(ChatMessage(id: UUID().uuidString, role: .user, text: text))
@@ -791,6 +895,7 @@ final class AgentStore: ObservableObject {
             "type": "user_message",
             "text": text,
             "paths": paths,
+            "resources": resources.map(\.payload),
         ]
         isAgentWorking = true
         updateTurnWaitIndicator()
@@ -1187,7 +1292,7 @@ final class AgentStore: ObservableObject {
     }
 
     private func applicationSupportDirectory() -> URL {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".quiet", isDirectory: true)
+        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".blackhole", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
@@ -1195,7 +1300,7 @@ final class AgentStore: ObservableObject {
     private func contentDirectory() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
-        let url = documents.appendingPathComponent("Quiet", isDirectory: true)
+        let url = documents.appendingPathComponent("Blackhole", isDirectory: true)
         try? FileManager.default.createDirectory(at: url.appendingPathComponent("Inbox", isDirectory: true), withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: url.appendingPathComponent("Files", isDirectory: true), withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: url.appendingPathComponent("Output", isDirectory: true), withIntermediateDirectories: true)
@@ -1223,18 +1328,18 @@ final class AgentStore: ObservableObject {
         let url = applicationSupportDirectory().appendingPathComponent("memory.md", isDirectory: false)
         if !FileManager.default.fileExists(atPath: url.path) {
             let defaultMemory = """
-            # Quiet Memory
+            # Blackhole Memory
 
-            These are user-editable file organizing rules for Quiet.
+            These are user-editable resource organizing rules for Blackhole.
 
             ## Learning User Preferences
 
-            - When the user expresses a stable preference for how files should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
+            - When the user expresses a stable preference for how resources should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
             - Only record durable preferences. Do not record one-off instructions unless the user asks you to remember them.
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
 
-            ## Folder Taxonomy
+            ## Resource Taxonomy
 
             - Images: png, jpg, jpeg, gif, webp, heic, tiff, svg, psd, ai, sketch, fig
             - Documents: pdf, doc, docx, txt, md, rtf, pages, epub
@@ -1242,6 +1347,8 @@ final class AgentStore: ObservableObject {
             - Slides: ppt, pptx, key
             - Archives: zip, rar, 7z, tar, gz, dmg, pkg
             - Code: js, jsx, ts, tsx, mjs, cjs, py, rb, go, rs, swift, java, kt, html, css, json, yaml, yml, toml, sh
+            - Links: saved URLs and web references
+            - Snippets: pasted text, notes, prompts, and copied references
             - Audio: mp3, wav, aac, flac, m4a
             - Video: mp4, mov, avi, mkv, webm
             - Folders: directories
@@ -1254,7 +1361,7 @@ final class AgentStore: ObservableObject {
             ## Conversation Style
 
             - Be concise.
-            - Tell the user what was moved and where.
+            - Tell the user what was captured, moved, and where.
             - When a problem occurs, name the failed file and continue with the rest.
             - Do not mention internal logs, manifests, or implementation files unless the user asks.
             """
@@ -1265,7 +1372,7 @@ final class AgentStore: ObservableObject {
 
             ## Learning User Preferences
 
-            - When the user expresses a stable preference for how files should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
+            - When the user expresses a stable preference for how resources should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
             - Only record durable preferences. Do not record one-off instructions unless the user asks you to remember them.
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
@@ -1497,6 +1604,11 @@ struct QuietView: View {
         .onReceive(NotificationCenter.default.publisher(for: .quietFocusComposer)) { _ in
             guard !isSettingsPresented else { return }
             isInputFocused = true
+        }
+        .onChange(of: store.inputText) { _, text in
+            if text.isEmpty {
+                store.inputContainsPastedResource = false
+            }
         }
         .preferredColorScheme(store.appearanceMode.colorScheme)
     }
@@ -1806,6 +1918,9 @@ struct QuietView: View {
                 placeholder: store.copy.composerPlaceholder,
                 isFocused: $isInputFocused,
                 measuredHeight: $composerInputHeight,
+                onPaste: {
+                    store.inputContainsPastedResource = true
+                },
                 onSubmit: {
                     store.sendCurrentMessage()
                 }
@@ -1978,6 +2093,7 @@ struct ComposerTextView: NSViewRepresentable {
     let placeholder: String
     @Binding var isFocused: Bool
     @Binding var measuredHeight: CGFloat
+    let onPaste: () -> Void
     let onSubmit: () -> Void
 
     func makeNSView(context: Context) -> ComposerInputContainer {
@@ -1986,6 +2102,7 @@ struct ComposerTextView: NSViewRepresentable {
             text = nextText
         }
         view.onSubmit = onSubmit
+        view.onPaste = onPaste
         view.onFocusChange = { focused in
             isFocused = focused
         }
@@ -2000,6 +2117,7 @@ struct ComposerTextView: NSViewRepresentable {
     func updateNSView(_ view: ComposerInputContainer, context: Context) {
         view.placeholder = placeholder
         view.onSubmit = onSubmit
+        view.onPaste = onPaste
         view.onTextChange = { nextText in
             text = nextText
         }
@@ -2031,6 +2149,7 @@ final class ComposerInputContainer: NSView, NSTextViewDelegate {
 
     var onTextChange: ((String) -> Void)?
     var onSubmit: (() -> Void)?
+    var onPaste: (() -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
     var placeholder: String = "" {
@@ -2146,6 +2265,12 @@ final class ComposerInputContainer: NSView, NSTextViewDelegate {
 
 final class ComposerInputTextView: NSTextView {
     weak var container: ComposerInputContainer?
+
+    override func paste(_ sender: Any?) {
+        super.paste(sender)
+        container?.onPaste?()
+        refreshComposerChrome()
+    }
 
     override func setMarkedText(_ string: Any, selectedRange: NSRange, replacementRange: NSRange) {
         super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)

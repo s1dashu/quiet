@@ -19,8 +19,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "../../../..");
 const require = createRequire(import.meta.url);
 
-const quietHome = resolve(process.env.QUIET_HOME?.trim() || join(homedir(), ".quiet"));
-const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || join(homedir(), "Documents", "Quiet"));
+const quietHome = resolve(process.env.QUIET_HOME?.trim() || join(homedir(), ".blackhole"));
+const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || join(homedir(), "Documents", "Blackhole"));
 const inboxDir = join(quietContentHome, "Inbox");
 const filesDir = join(quietContentHome, "Files");
 const outputDir = join(quietContentHome, "Output");
@@ -36,21 +36,21 @@ const sessionHistoryBatchSize = 10;
 const copy = language === "zh"
   ? {
       startupFailed: "agent 启动失败，请检查模型 API Key 或 node_modules",
-      organizeFallback: "请整理这些文件。",
-      organizeInstruction: "你现在是 Quiet 的 pi-coding-agent。请真实使用可用的 pi 工具理解并整理文件。",
+      organizeFallback: "请整理这些资源。",
+      organizeInstruction: "你现在是 Blackhole 的 pi-coding-agent。请真实使用可用的 pi 工具理解并整理文件、链接、Snippet 和其他资源。",
       organizeDoneRule: "整理完成后，用中文简短总结你做了什么；不要提内部日志、manifest 或实现文件。",
-      explainFallback: "请说明你会如何安静处理拖入 Quiet 的文件。",
-      noInboxFiles: "没有文件进入 inbox",
-      taskTitle: "agent 整理任务",
+      explainFallback: "请说明你会如何处理丢进 Blackhole 的文件、链接和文本片段。",
+      noInboxFiles: "没有资源进入 inbox",
+      taskTitle: "agent 资源整理任务",
     }
   : {
       startupFailed: "Agent failed to start. Check the model API key or node_modules.",
-      organizeFallback: "Please organize these files.",
-      organizeInstruction: "You are Quiet's pi-coding-agent. Use the available pi tools to understand and organize the files.",
+      organizeFallback: "Please organize these resources.",
+      organizeInstruction: "You are Blackhole's pi-coding-agent. Use the available pi tools to understand and organize files, links, snippets, and other resources.",
       organizeDoneRule: "When finished, briefly summarize what you moved and where in English; do not mention internal logs, manifests, or implementation files.",
-      explainFallback: "Explain how you would quietly handle files dropped into Quiet.",
-      noInboxFiles: "No files entered the inbox",
-      taskTitle: "Agent organization task",
+      explainFallback: "Explain how you would handle files, links, and snippets dropped into Blackhole.",
+      noInboxFiles: "No resources entered the inbox",
+      taskTitle: "Agent resource organization task",
     };
 
 mkdirSync(inboxDir, { recursive: true });
@@ -61,18 +61,18 @@ mkdirSync(agentDir, { recursive: true });
 mkdirSync(workspaceDir, { recursive: true });
 
 const defaultMemory = `
-# Quiet Memory
+# Blackhole Memory
 
-These are user-editable file organizing rules for Quiet.
+These are user-editable resource organizing rules for Blackhole.
 
 ## Learning User Preferences
 
-- When the user expresses a stable preference for how files should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
+- When the user expresses a stable preference for how resources should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
 - Only record durable preferences. Do not record one-off instructions unless the user asks you to remember them.
 - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
 
-## Folder Taxonomy
+## Resource Taxonomy
 
 - Images: png, jpg, jpeg, gif, webp, heic, tiff, svg, psd, ai, sketch, fig
 - Documents: pdf, doc, docx, txt, md, rtf, pages, epub
@@ -80,6 +80,8 @@ These are user-editable file organizing rules for Quiet.
 - Slides: ppt, pptx, key
 - Archives: zip, rar, 7z, tar, gz, dmg, pkg
 - Code: js, jsx, ts, tsx, mjs, cjs, py, rb, go, rs, swift, java, kt, html, css, json, yaml, yml, toml, sh
+- Links: saved URLs and web references
+- Snippets: pasted text, notes, prompts, and copied references
 - Audio: mp3, wav, aac, flac, m4a
 - Video: mp4, mov, avi, mkv, webm
 - Folders: directories
@@ -92,7 +94,7 @@ These are user-editable file organizing rules for Quiet.
 ## Conversation Style
 
 - Be concise.
-- Tell the user what was moved and where.
+- Tell the user what was captured, moved, and where.
 - When a problem occurs, name the failed file and continue with the rest.
 - Do not mention internal logs, manifests, or implementation files unless the user asks.
 `.trim();
@@ -100,7 +102,7 @@ These are user-editable file organizing rules for Quiet.
 const memoryPreferenceGuidance = `
 ## Learning User Preferences
 
-- When the user expresses a stable preference for how files should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
+- When the user expresses a stable preference for how resources should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
 - Only record durable preferences. Do not record one-off instructions unless the user asks you to remember them.
 - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
@@ -180,6 +182,17 @@ function safeName(name) {
   return cleaned || "Untitled";
 }
 
+function safeResourceStem(value, fallback) {
+  const text = String(value || "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/^www\./i, "")
+    .replace(/[?#].*$/g, "")
+    .replace(/[/:\\|<>*"']/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return safeName((text || fallback).slice(0, 80));
+}
+
 function uniqueDestination(dir, originalName) {
   mkdirSync(dir, { recursive: true });
   const ext = originalName.includes(".") ? originalName.slice(originalName.lastIndexOf(".")) : "";
@@ -220,7 +233,7 @@ async function ingestToInbox(paths) {
         throw new Error("源文件不存在");
       }
       if (isInside(quietHome, source) || isInside(quietContentHome, source)) {
-        throw new Error("文件已经在 Quiet 目录内");
+        throw new Error("文件已经在 Blackhole 目录内");
       }
       const destination = uniqueDestination(batchDir, safeName(source.split(sep).at(-1)));
       await movePath(source, destination);
@@ -231,6 +244,46 @@ async function ingestToInbox(paths) {
       });
     } catch (error) {
       failed.push({ source, reason: error?.message ?? String(error) });
+    }
+  }
+
+  return { batchId, batchDir, ingested, failed };
+}
+
+function resourceMarkdown(resource, capturedAt) {
+  const kind = String(resource?.kind || "text").trim().toLowerCase();
+  const value = String(resource?.value || "").trim();
+  if (kind === "link") {
+    return `# Link\n\n- URL: ${value}\n- Captured: ${capturedAt}\n\n## Notes\n\n`;
+  }
+  return `# Snippet\n\n- Captured: ${capturedAt}\n\n## Content\n\n\`\`\`text\n${value}\n\`\`\`\n`;
+}
+
+async function ingestResourcesToInbox(resources) {
+  const batchId = new Date().toISOString().replace(/[:.]/g, "-");
+  const batchDir = join(inboxDir, batchId);
+  mkdirSync(batchDir, { recursive: true });
+  const capturedAt = new Date().toISOString();
+  const ingested = [];
+  const failed = [];
+
+  for (const resource of resources) {
+    const kind = String(resource?.kind || "text").trim().toLowerCase() === "link" ? "link" : "text";
+    const value = String(resource?.value || "").trim();
+    try {
+      if (!value) {
+        throw new Error("资源内容为空");
+      }
+      const stem = safeResourceStem(value, kind === "link" ? "Link" : "Snippet");
+      const destination = uniqueDestination(batchDir, `${stem}.${kind === "link" ? "url" : "snippet"}.md`);
+      writeFileSync(destination, resourceMarkdown({ kind, value }, capturedAt), "utf8");
+      ingested.push({
+        originalSource: kind,
+        inboxPath: destination,
+        originalName: safeName(kind === "link" ? `Link: ${value}` : `Snippet: ${value.slice(0, 60)}`),
+      });
+    } catch (error) {
+      failed.push({ source: kind, reason: error?.message ?? String(error) });
     }
   }
 
@@ -256,7 +309,7 @@ function findPackageEntry(packageName) {
 async function loadPi() {
   const entry = findPackageEntry("@earendil-works/pi-coding-agent");
   if (!entry) {
-    throw new Error("找不到 @earendil-works/pi-coding-agent。请先运行 npm install，或重新打包 Quiet.app。");
+    throw new Error("找不到 @earendil-works/pi-coding-agent。请先运行 npm install，或重新打包 Blackhole.app。");
   }
   return import(pathToFileURL(entry).href);
 }
@@ -264,7 +317,7 @@ async function loadPi() {
 async function loadPiAi() {
   const entry = findPackageEntry("@earendil-works/pi-ai");
   if (!entry) {
-    throw new Error("找不到 @earendil-works/pi-ai。请先运行 npm install，或重新打包 Quiet.app。");
+    throw new Error("找不到 @earendil-works/pi-ai。请先运行 npm install，或重新打包 Blackhole.app。");
   }
   return import(pathToFileURL(entry).href);
 }
@@ -523,7 +576,7 @@ async function loadSessionHistory(sessionPath) {
 async function deleteSession(sessionPath) {
   if (!sessionPath) return;
   if (!isInside(sessionsDir, sessionPath)) {
-    throw new Error("Refusing to delete a file outside the Quiet sessions directory.");
+    throw new Error("Refusing to delete a file outside the Blackhole sessions directory.");
   }
   const currentPath = currentSession?.sessionFile;
   const isCurrent = currentPath && resolve(currentPath) === resolve(sessionPath);
@@ -706,25 +759,25 @@ function shortStat(path) {
 }
 
 function buildOrganizePrompt(paths, userText) {
-  const fileList = paths.map(shortStat);
+  const resourceList = paths.map(shortStat);
   const rules = language === "zh"
     ? `硬性规则：
-1. 只处理本次列出的 inbox 文件：${inboxDir}
-2. 请按 ~/.quiet/memory.md 的规则理解用户的偏好并整理。
-3. 必须用 mv 移动，不要复制，不要删除用户文件；成功后 inbox 源路径不应继续存在。
+1. 只处理本次列出的 inbox 资源：${inboxDir}
+2. 请按 ~/.blackhole/memory.md 的规则理解用户的偏好并整理。
+3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后 inbox 源路径不应继续存在。
 4. 整理后的文件只能放到 files：${filesDir}
 5. 新建摘要、索引、报告或说明文档只能写到 output：${outputDir}
-6. 按文件名、扩展名和必要内容判断用途，不要只按扩展名机械分类。
+6. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
 7. ${copy.organizeDoneRule}`
     : `Hard rules:
-1. Only process the inbox files listed in this task: ${inboxDir}
-2. Follow ~/.quiet/memory.md to understand the user's preferences and organize accordingly.
-3. Move with mv; do not copy or delete user files. After a successful move, the inbox source path should no longer exist.
+1. Only process the inbox resources listed in this task: ${inboxDir}
+2. Follow ~/.blackhole/memory.md to understand the user's preferences and organize accordingly.
+3. Move with mv; do not copy or delete user files or resources. After a successful move, the inbox source path should no longer exist.
 4. Organized files must stay under files: ${filesDir}
 5. Write new summaries, indexes, reports, or notes only under output: ${outputDir}
-6. Understand purpose from filenames, extensions, and content when needed; do not classify mechanically by extension only.
+6. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
 7. ${copy.organizeDoneRule}`;
-  const pendingLabel = language === "zh" ? "待整理文件" : "Files to organize";
+  const pendingLabel = language === "zh" ? "待整理资源" : "Resources to organize";
   return `
 ${userText || copy.organizeFallback}
 
@@ -732,40 +785,55 @@ ${copy.organizeInstruction}
 
 ${rules}
 
-Quiet dirs:
+Blackhole dirs:
 - content root: ${quietContentHome}
 - inbox: ${inboxDir}
 - files: ${filesDir}
 - output: ${outputDir}
 
 ${pendingLabel}:
-${JSON.stringify(fileList, null, 2)}
+${JSON.stringify(resourceList, null, 2)}
 `.trim();
 }
 
 async function handleUserMessage(message) {
   const text = String(message.text ?? "").trim();
   const paths = Array.isArray(message.paths) ? message.paths.map((path) => resolve(String(path))) : [];
+  const resources = Array.isArray(message.resources)
+    ? message.resources
+        .map((resource) => ({
+          kind: String(resource?.kind || "text"),
+          value: String(resource?.value || ""),
+        }))
+        .filter((resource) => resource.value.trim())
+    : [];
 
-  if (paths.length > 0) {
-    emit({ type: "status", value: `正在移入 inbox：${paths.length} 项` });
-    const ingestion = await ingestToInbox(paths);
-    if (ingestion.failed.length > 0) {
+  if (paths.length > 0 || resources.length > 0) {
+    emit({ type: "status", value: `正在移入 inbox：${paths.length + resources.length} 项` });
+    const fileIngestion = paths.length > 0
+      ? await ingestToInbox(paths)
+      : { ingested: [], failed: [] };
+    const resourceIngestion = resources.length > 0
+      ? await ingestResourcesToInbox(resources)
+      : { ingested: [], failed: [] };
+    const ingested = [...fileIngestion.ingested, ...resourceIngestion.ingested];
+    const failed = [...fileIngestion.failed, ...resourceIngestion.failed];
+    if (failed.length > 0) {
       emit({
         type: "error",
-        message: `有 ${ingestion.failed.length} 项未能进入 inbox：${ingestion.failed[0].reason}`,
+        message: `有 ${failed.length} 项未能进入 inbox：${failed[0].reason}`,
       });
     }
-    if (ingestion.ingested.length === 0) {
+    if (ingested.length === 0) {
       emit({ type: "status", value: copy.noInboxFiles });
       return;
     }
-    const inboxPaths = ingestion.ingested.map((item) => item.inboxPath);
+    const inboxPaths = ingested.map((item) => item.inboxPath);
     emit({ type: "status", value: "agent 工作中" });
     emit({
       type: "plan",
       title: copy.taskTitle,
-      items: ingestion.ingested.map((item) => `${item.originalName} -> ~/Documents/Quiet/Inbox -> ~/Documents/Quiet/Files`),
+      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/Inbox -> ~/Documents/Blackhole/Files`),
     });
     const session = await getPiSession();
     await session.prompt(buildOrganizePrompt(inboxPaths, text), { source: "interactive" });
@@ -781,8 +849,8 @@ async function handleUserMessage(message) {
 emit({
   type: "ready",
   pid: process.pid,
-  protocol: "quiet-pi-jsonl-v1",
-  app: "quiet",
+  protocol: "blackhole-pi-jsonl-v1",
+  app: "blackhole",
   filesRoot: filesDir,
   inbox: inboxDir,
   output: outputDir,
