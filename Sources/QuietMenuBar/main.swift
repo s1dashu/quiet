@@ -1939,7 +1939,7 @@ struct QuietView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 8) {
+        HStack(alignment: .bottom, spacing: 6) {
             ComposerTextView(
                 text: $store.inputText,
                 placeholder: store.copy.composerPlaceholder,
@@ -1953,13 +1953,8 @@ struct QuietView: View {
                 }
             )
                 .frame(height: composerInputHeight)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6.5)
-                .background(quietComposerFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(isInputFocused ? quietChatText.opacity(0.18) : quietHairline, lineWidth: 0.8)
-                }
+                .padding(.leading, 13)
+                .padding(.vertical, 8)
 
             Button {
                 submitCurrentMessage()
@@ -1967,10 +1962,18 @@ struct QuietView: View {
                 LucideIcon(id: "arrow-up", fallbackSystemName: "arrow.up")
                     .foregroundStyle(quietPrimaryText)
                     .frame(width: 15, height: 15)
-                    .frame(width: 32, height: 32)
+                    .frame(width: 30, height: 30)
                     .background(quietPrimaryFill, in: Circle())
             }
             .buttonStyle(.plain)
+            .padding(.trailing, 5)
+            .padding(.vertical, 5)
+        }
+        .frame(maxWidth: .infinity)
+        .background(quietComposerFill, in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(isInputFocused ? quietChatText.opacity(0.18) : quietHairline, lineWidth: 0.8)
         }
         .padding(12)
         .background(Color(nsColor: blackholeWindowFill))
