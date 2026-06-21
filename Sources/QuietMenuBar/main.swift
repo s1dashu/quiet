@@ -1599,6 +1599,7 @@ struct QuietView: View {
                     SessionOverlayPanel(
                         sessions: store.sessions,
                         currentSessionPath: store.currentSessionPath,
+                        topContentInset: 96,
                         onSelect: { session in
                             store.openSession(session)
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -1610,12 +1611,16 @@ struct QuietView: View {
                         }
                     )
                     .frame(width: min(224, max(168, geometry.size.width * 0.72)))
-                    .padding(.leading, 10)
-                    .padding(.top, 54)
-                    .padding(.bottom, 12)
+                    .frame(maxHeight: .infinity)
+                    .ignoresSafeArea()
                     .transition(.move(edge: .leading).combined(with: .opacity))
                     .zIndex(2)
                 }
+
+                header
+                    .opacity(isSidebarPresented ? 1 : 0)
+                    .allowsHitTesting(isSidebarPresented)
+                    .zIndex(3)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
@@ -1941,6 +1946,7 @@ struct FileDropTargetOverlay: View {
 struct SessionOverlayPanel: View {
     let sessions: [QuietSessionSummary]
     let currentSessionPath: String
+    let topContentInset: CGFloat
     let onSelect: (QuietSessionSummary) -> Void
     let onDelete: (QuietSessionSummary) -> Void
 
@@ -1971,18 +1977,19 @@ struct SessionOverlayPanel: View {
                     }
                 }
                 .padding(.horizontal, 6)
-                .padding(.top, 12)
+                .padding(.top, topContentInset)
                 .padding(.bottom, 12)
             }
             .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: blackholeSidebarFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(Color(nsColor: blackholeSidebarFill), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(quietNonUserBubbleBorder, lineWidth: 0.8)
         }
-        .shadow(color: .black.opacity(0.12), radius: 18, x: 0, y: 10)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: .black.opacity(0.18), radius: 18, x: 4, y: 0)
     }
 }
 
