@@ -82,17 +82,17 @@ private func quietDynamicColor(light: NSColor, dark: NSColor) -> Color {
 }
 
 private let quietChatText = quietDynamicColor(
-    light: NSColor(calibratedRed: 0.94, green: 0.94, blue: 0.91, alpha: 1),
-    dark: NSColor(calibratedRed: 0.94, green: 0.94, blue: 0.91, alpha: 1)
+    light: NSColor(calibratedWhite: 0.94, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.94, alpha: 1)
 )
 private let quietChatMutedText = quietChatText.opacity(0.62)
 private let quietNonUserMessageText = quietDynamicColor(
-    light: NSColor(calibratedRed: 0.97, green: 0.97, blue: 0.94, alpha: 1),
-    dark: NSColor(calibratedRed: 0.97, green: 0.97, blue: 0.94, alpha: 1)
+    light: NSColor(calibratedWhite: 0.96, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.96, alpha: 1)
 )
 private let quietNonUserBubbleFill = quietDynamicColor(
-    light: NSColor(calibratedRed: 0.10, green: 0.10, blue: 0.12, alpha: 0.94),
-    dark: NSColor(calibratedRed: 0.10, green: 0.10, blue: 0.12, alpha: 0.94)
+    light: NSColor(calibratedWhite: 0.115, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.115, alpha: 1)
 )
 private let quietNonUserBubbleBorder = quietDynamicColor(
     light: NSColor.white.withAlphaComponent(0.12),
@@ -101,20 +101,20 @@ private let quietNonUserBubbleBorder = quietDynamicColor(
 private let quietSettingsControlFill = quietNonUserBubbleFill
 private let quietSettingsControlBorder = quietNonUserBubbleBorder
 private let quietSubtleText = quietDynamicColor(
-    light: NSColor(calibratedRed: 0.66, green: 0.67, blue: 0.69, alpha: 1),
-    dark: NSColor(calibratedRed: 0.66, green: 0.67, blue: 0.69, alpha: 1)
+    light: NSColor(calibratedWhite: 0.66, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.66, alpha: 1)
 )
 private let quietPrimaryFill = quietDynamicColor(
-    light: NSColor(calibratedRed: 0.88, green: 0.95, blue: 1.0, alpha: 1),
-    dark: NSColor(calibratedRed: 0.88, green: 0.95, blue: 1.0, alpha: 1)
+    light: NSColor.white,
+    dark: NSColor.white
 )
 private let quietPrimaryText = quietDynamicColor(
-    light: NSColor(calibratedRed: 0.03, green: 0.04, blue: 0.05, alpha: 1),
-    dark: NSColor(calibratedRed: 0.03, green: 0.04, blue: 0.05, alpha: 1)
+    light: NSColor.black,
+    dark: NSColor.black
 )
 private let quietComposerFill = quietDynamicColor(
-    light: NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.095, alpha: 1),
-    dark: NSColor(calibratedRed: 0.08, green: 0.08, blue: 0.095, alpha: 1)
+    light: NSColor(calibratedWhite: 0.09, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.09, alpha: 1)
 )
 private let quietHoverFill = quietDynamicColor(
     light: NSColor.white.withAlphaComponent(0.08),
@@ -132,8 +132,9 @@ private let quietMarkdownCodeFill = quietDynamicColor(
     light: NSColor.black.withAlphaComponent(0.34),
     dark: NSColor.black.withAlphaComponent(0.34)
 )
-private let blackholeWindowFill = NSColor(calibratedRed: 0.025, green: 0.025, blue: 0.03, alpha: 1)
-private let blackholePanelFill = NSColor(calibratedRed: 0.055, green: 0.055, blue: 0.065, alpha: 1)
+private let blackholeWindowFill = NSColor(calibratedWhite: 0.015, alpha: 1)
+private let blackholePanelFill = NSColor(calibratedWhite: 0.075, alpha: 1)
+private let blackholeSidebarFill = NSColor(calibratedWhite: 0.10, alpha: 1)
 private let blackholeBorder = NSColor.white.withAlphaComponent(0.11)
 private let quietThinkingLevelOrder = ["off", "minimal", "low", "medium", "high", "xhigh"]
 
@@ -1834,17 +1835,7 @@ struct QuietView: View {
 
             Text(quietAppName)
                 .font(.system(size: 19, weight: .semibold).italic())
-                .foregroundStyle(
-                    LinearGradient(
-                        stops: [
-                            .init(color: .white.opacity(0.98), location: 0.0),
-                            .init(color: Color(red: 0.82, green: 0.90, blue: 0.96).opacity(0.92), location: 0.48),
-                            .init(color: .white.opacity(0.74), location: 1.0),
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .foregroundStyle(.white)
                 .shadow(color: .black.opacity(0.22), radius: 0.35, x: 0, y: 0.35)
 
             Spacer()
@@ -1986,8 +1977,7 @@ struct SessionOverlayPanel: View {
             .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .background(quietNonUserBubbleFill, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(Color(nsColor: blackholeSidebarFill), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(quietNonUserBubbleBorder, lineWidth: 0.8)
@@ -2019,7 +2009,7 @@ struct SessionSidebarRow: View {
             Button(action: onDelete) {
                 LucideIcon(id: "trash-2", fallbackSystemName: "trash")
                     .frame(width: 12, height: 12)
-                    .foregroundStyle(Color(red: 0.62, green: 0.10, blue: 0.08))
+                    .foregroundStyle(.white.opacity(0.72))
                     .frame(width: 23, height: 23)
                     .background(quietSelectedFill, in: Circle())
             }
@@ -2470,7 +2460,7 @@ struct SettingsPanel: View {
                                 .font(.system(size: 12, weight: .semibold))
                             Spacer()
                         }
-                        .foregroundStyle(Color(red: 0.70, green: 0.13, blue: 0.10))
+                        .foregroundStyle(.white.opacity(0.84))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 10)
                         .background(quietSettingsControlFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -3155,11 +3145,11 @@ struct ToolCallBubble: View {
     private var statusColor: Color {
         switch message.toolStatus {
         case .running:
-            Color(red: 0.10, green: 0.42, blue: 0.86)
+            .white.opacity(0.72)
         case .finished:
-            Color(red: 0.03, green: 0.55, blue: 0.22)
+            .white.opacity(0.82)
         case .failed:
-            Color(red: 0.74, green: 0.12, blue: 0.10)
+            .white.opacity(0.58)
         }
     }
 }
@@ -3342,7 +3332,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         window.contentView = rootView
         window.isOpaque = false
-        window.backgroundColor = blackholeWindowFill
+        window.backgroundColor = .clear
         window.hasShadow = true
         window.invalidateShadow()
         window.level = .normal
