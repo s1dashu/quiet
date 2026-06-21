@@ -1737,6 +1737,18 @@ struct QuietView: View {
                             .onChange(of: store.sessionScrollRequest) { _, _ in
                                 isFollowingLatest = true
                                 showFollowButton = false
+                                var transaction = Transaction(animation: nil)
+                                transaction.disablesAnimations = true
+                                withTransaction(transaction) {
+                                    proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+                                }
+                                DispatchQueue.main.async {
+                                    var nextTransaction = Transaction(animation: nil)
+                                    nextTransaction.disablesAnimations = true
+                                    withTransaction(nextTransaction) {
+                                        proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+                                    }
+                                }
                             }
                             .onChange(of: store.historyAnchorScrollRequest) { _, _ in
                                 guard let anchorId = store.historyAnchorMessageId else { return }
