@@ -8,6 +8,7 @@ import UniformTypeIdentifiers
 private let quietAppName = "Blackhole"
 private let quietWindowDefaultSize = NSSize(width: 380, height: 520)
 private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
+private let quietHeaderHeight: CGFloat = 54
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
@@ -1588,7 +1589,8 @@ struct QuietView: View {
         GeometryReader { geometry in
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
-                    header
+                    Color.clear
+                        .frame(height: quietHeaderHeight)
 
                     messageList
 
@@ -1599,7 +1601,7 @@ struct QuietView: View {
                     SessionOverlayPanel(
                         sessions: store.sessions,
                         currentSessionPath: store.currentSessionPath,
-                        topContentInset: 76,
+                        topContentInset: quietHeaderHeight + 22,
                         onSelect: { session in
                             store.openSession(session)
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -1618,8 +1620,6 @@ struct QuietView: View {
                 }
 
                 header
-                    .opacity(isSidebarPresented ? 1 : 0)
-                    .allowsHitTesting(isSidebarPresented)
                     .zIndex(3)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
