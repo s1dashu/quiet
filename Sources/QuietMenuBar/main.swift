@@ -10,7 +10,7 @@ private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 540)
 private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
 private let quietHeaderHeight: CGFloat = 54
-private let quietDesktopHeaderLeadingInset: CGFloat = 78
+private let quietDesktopHeaderLeadingInset: CGFloat = 132
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
@@ -1649,6 +1649,7 @@ struct QuietView: View {
             }
         }
         .background(Color(nsColor: blackholeWindowFill))
+        .ignoresSafeArea(.container, edges: [.top, .leading])
         .onDrop(of: quietDropTypeIdentifiers, isTargeted: $isDropTargeted, perform: store.handleDrop)
         .onReceive(NotificationCenter.default.publisher(for: .quietFocusComposer)) { _ in
             guard !isSettingsPresented else { return }
@@ -1695,7 +1696,7 @@ struct QuietView: View {
                     SessionOverlayPanel(
                         sessions: store.sessions,
                         currentSessionPath: store.currentSessionPath,
-                        topContentInset: quietHeaderHeight + 8,
+                        topContentInset: 8,
                         onSelect: { session in
                             store.openSession(session)
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -1708,7 +1709,7 @@ struct QuietView: View {
                     )
                     .frame(width: sidebarWidth)
                     .frame(maxHeight: .infinity)
-                    .ignoresSafeArea()
+                    .padding(.top, quietHeaderHeight)
                     .transition(.move(edge: .leading).combined(with: .opacity))
                     .zIndex(2)
                 }
