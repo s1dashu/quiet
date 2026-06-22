@@ -272,6 +272,7 @@ struct QuietCopy {
     let quietRules: String
     let editQuietRules: String
     let quietRulesHelp: String
+    let save: String
     let saveAndRestart: String
     let newSession: String
     let moreActions: String
@@ -319,6 +320,7 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             quietRules: "Resource organizing rules",
             editQuietRules: "Edit resource organizing rules",
             quietRulesHelp: "Open ~/.blackhole/memory.md. Restart the agent after saving.",
+            save: "Save",
             saveAndRestart: "Save and restart agent",
             newSession: "New session",
             moreActions: "More actions",
@@ -363,6 +365,7 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             quietRules: "资源整理规则",
             editQuietRules: "编辑资源整理规则",
             quietRulesHelp: "打开 ~/.blackhole/memory.md，保存后重启 agent 生效",
+            save: "保存",
             saveAndRestart: "保存并重启 agent",
             newSession: "新建会话",
             moreActions: "更多操作",
@@ -1427,8 +1430,7 @@ final class AgentStore: ObservableObject {
         let nextAppearance = QuietAppearanceMode.normalized(appearance)
         guard !nextProvider.isEmpty, !nextModel.isEmpty else { return }
 
-        let shouldRestart = self.language != nextLanguage.rawValue
-            || modelProvider != nextProvider
+        let shouldRestart = modelProvider != nextProvider
             || modelId != nextModel
             || modelApiKey != nextApiKey
             || thinkingLevel != nextThinking
@@ -2727,6 +2729,14 @@ struct SettingsPanel: View {
         let selectedModel = modelOptions.first(where: { $0.modelId == model }) ?? modelOptions.first
         let thinkingOptions = (selectedModel?.thinkingLevels ?? ["off", "minimal", "low", "medium", "high"])
             .map { (value: $0, label: thinkingLevelLabel($0)) }
+        let clampedThinking = closestThinkingLevel(
+            to: thinking,
+            in: selectedModel?.thinkingLevels ?? ["off", "minimal", "low", "medium", "high"]
+        )
+        let shouldRestartAgent = provider.trimmingCharacters(in: .whitespacesAndNewlines) != store.modelProvider
+            || model.trimmingCharacters(in: .whitespacesAndNewlines) != store.modelId
+            || apiKey.trimmingCharacters(in: .whitespacesAndNewlines) != store.modelApiKey
+            || clampedThinking != store.thinkingLevel
 
         VStack(spacing: 0) {
             HStack(spacing: 9) {
@@ -2789,7 +2799,7 @@ struct SettingsPanel: View {
                             store.saveSettings(language: language, provider: provider, model: model, apiKey: apiKey, thinking: thinking, appearance: appearance)
                             onClose()
                         } label: {
-                            Text(copy.saveAndRestart)
+                            Text(shouldRestartAgent ? copy.saveAndRestart : copy.save)
                                 .font(.system(size: 12, weight: .semibold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 9)
