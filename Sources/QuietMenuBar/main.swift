@@ -10,7 +10,7 @@ private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 540)
 private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
 private let quietHeaderHeight: CGFloat = 54
-private let quietDesktopHeaderLeadingInset: CGFloat = 132
+private let quietDesktopHeaderLeadingInset: CGFloat = 8
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
@@ -1649,7 +1649,6 @@ struct QuietView: View {
             }
         }
         .background(Color(nsColor: blackholeWindowFill))
-        .ignoresSafeArea(.container, edges: [.top, .leading])
         .onDrop(of: quietDropTypeIdentifiers, isTargeted: $isDropTargeted, perform: store.handleDrop)
         .onReceive(NotificationCenter.default.publisher(for: .quietFocusComposer)) { _ in
             guard !isSettingsPresented else { return }
@@ -3763,6 +3762,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let frameKeeper = WindowFrameKeeper()
         frameKeeper.frameStorageKey = Self.menuBarWindowFrameKey
         window.delegate = frameKeeper
+        frameKeeper.onFrameChange = { [weak self] in
+            self?.alignDesktopTrafficLights()
+        }
         self.frameKeeper = frameKeeper
         self.window = window
         applyAppearance(QuietAppearanceMode.normalized(UserDefaults.standard.string(forKey: quietAppearanceModeKey)))
@@ -3903,6 +3905,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         configureWindowForDesktopIfNeeded()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        alignDesktopTrafficLights()
+        DispatchQueue.main.async { [weak self] in
+            self?.alignDesktopTrafficLights()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
             NotificationCenter.default.post(name: .quietFocusComposer, object: nil)
         }
@@ -3969,6 +3975,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         updateChromeBorder()
         notifyWindowChromeModeDidChange()
+        alignDesktopTrafficLights()
     }
 
     private func notifyWindowChromeModeDidChange() {
@@ -3976,6 +3983,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             name: .quietWindowChromeModeDidChange,
             object: windowMode == .desktop
         )
+    }
+
+    private func alignDesktopTrafficLights() {
+        guard windowMode == .desktop,
+              let window,
+              let contentView = window.contentView,
+              let closeButton = window.standardWindowButton(.closeButton),
+              let buttonSuperview = closeButton.superview else {
+            return
+        }
+
+        let buttons = [
+            window.standardWindowButton(.closeButton),
+            window.standardWindowButton(.miniaturizeButton),
+            window.standardWindowButton(.zoomButton),
+        ].compactMap { $0 }
+
+        let headerCenterInContent = NSPoint(
+            x: 0,
+            y: contentView.bounds.maxY - quietHeaderHeight / 2
+        )
+        let headerCenterInButtonSuperview = buttonSuperview.convert(headerCenterInContent, from: contentView)
+        let deltaY = headerCenterInButtonSuperview.y - closeButton.frame.midY
+
+        guard abs(deltaY) > 0.5 else { return }
+        for button in buttons {
+            button.setFrameOrigin(NSPoint(x: button.frame.minX, y: button.frame.minY + deltaY))
+        }
     }
 
     private func showStatusItemMenu() {
@@ -4052,6 +4087,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @MainActor
 final class WindowFrameKeeper: NSObject, NSWindowDelegate {
     var frameStorageKey = "quiet.window.frame"
+    var onFrameChange: (() -> Void)?
 
     func windowDidMove(_ notification: Notification) {
         save(notification)
@@ -4059,6 +4095,7 @@ final class WindowFrameKeeper: NSObject, NSWindowDelegate {
 
     func windowDidResize(_ notification: Notification) {
         save(notification)
+        onFrameChange?()
     }
 
     private func save(_ notification: Notification) {
