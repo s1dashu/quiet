@@ -66,61 +66,88 @@ private func quietDynamicColor(light: NSColor, dark: NSColor) -> Color {
     Color(nsColor: quietDynamicNSColor(light: light, dark: dark))
 }
 
+private func quietResolvedCGColor(_ color: NSColor, colorScheme: ColorScheme) -> CGColor {
+    let appearanceName: NSAppearance.Name = colorScheme == .dark ? .darkAqua : .aqua
+    return quietResolvedCGColor(color, appearance: NSAppearance(named: appearanceName))
+}
+
+private func quietResolvedCGColor(_ color: NSColor, appearance: NSAppearance?) -> CGColor {
+    var resolvedColor = color.cgColor
+    if let appearance {
+        appearance.performAsCurrentDrawingAppearance {
+            resolvedColor = color.cgColor
+        }
+    }
+    return resolvedColor
+}
+
 private let quietChatText = quietDynamicColor(
-    light: NSColor(calibratedWhite: 0.94, alpha: 1),
+    light: NSColor(calibratedWhite: 0.08, alpha: 1),
     dark: NSColor(calibratedWhite: 0.94, alpha: 1)
 )
 private let quietChatMutedText = quietChatText.opacity(0.62)
 private let quietNonUserMessageText = quietDynamicColor(
-    light: NSColor(calibratedWhite: 0.96, alpha: 1),
+    light: NSColor(calibratedWhite: 0.12, alpha: 1),
     dark: NSColor(calibratedWhite: 0.96, alpha: 1)
 )
 private let quietNonUserBubbleFill = quietDynamicColor(
-    light: NSColor(calibratedWhite: 0.115, alpha: 1),
+    light: NSColor(calibratedWhite: 0.92, alpha: 1),
     dark: NSColor(calibratedWhite: 0.115, alpha: 1)
 )
 private let quietNonUserBubbleBorder = quietDynamicColor(
-    light: NSColor.white.withAlphaComponent(0.12),
+    light: NSColor.black.withAlphaComponent(0.12),
     dark: NSColor.white.withAlphaComponent(0.12)
 )
 private let quietSettingsControlFill = quietNonUserBubbleFill
 private let quietSettingsControlBorder = quietNonUserBubbleBorder
 private let quietSubtleText = quietDynamicColor(
-    light: NSColor(calibratedWhite: 0.66, alpha: 1),
+    light: NSColor(calibratedWhite: 0.38, alpha: 1),
     dark: NSColor(calibratedWhite: 0.66, alpha: 1)
 )
 private let quietPrimaryFill = quietDynamicColor(
-    light: NSColor.white,
+    light: NSColor(calibratedWhite: 0.05, alpha: 1),
     dark: NSColor.white
 )
 private let quietPrimaryText = quietDynamicColor(
-    light: NSColor.black,
+    light: NSColor.white,
     dark: NSColor.black
 )
 private let quietComposerFill = quietDynamicColor(
-    light: NSColor(calibratedWhite: 0.09, alpha: 1),
+    light: NSColor(calibratedWhite: 0.91, alpha: 1),
     dark: NSColor(calibratedWhite: 0.09, alpha: 1)
 )
 private let quietHoverFill = quietDynamicColor(
-    light: NSColor.white.withAlphaComponent(0.08),
+    light: NSColor.black.withAlphaComponent(0.06),
     dark: NSColor.white.withAlphaComponent(0.08)
 )
 private let quietSelectedFill = quietDynamicColor(
-    light: NSColor.white.withAlphaComponent(0.12),
+    light: NSColor.black.withAlphaComponent(0.08),
     dark: NSColor.white.withAlphaComponent(0.12)
 )
 private let quietHairline = quietDynamicColor(
-    light: NSColor.white.withAlphaComponent(0.10),
+    light: NSColor.black.withAlphaComponent(0.11),
     dark: NSColor.white.withAlphaComponent(0.10)
 )
 private let quietMarkdownCodeFill = quietDynamicColor(
-    light: NSColor.black.withAlphaComponent(0.34),
+    light: NSColor.black.withAlphaComponent(0.08),
     dark: NSColor.black.withAlphaComponent(0.34)
 )
-private let blackholeWindowFill = NSColor(calibratedWhite: 0.015, alpha: 1)
-private let blackholePanelFill = NSColor(calibratedWhite: 0.075, alpha: 1)
-private let blackholeSidebarFill = NSColor(calibratedWhite: 0.10, alpha: 1)
-private let blackholeBorder = NSColor.white.withAlphaComponent(0.11)
+private let blackholeWindowFill = quietDynamicNSColor(
+    light: NSColor(calibratedWhite: 0.965, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.015, alpha: 1)
+)
+private let blackholePanelFill = quietDynamicNSColor(
+    light: NSColor(calibratedWhite: 0.90, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.075, alpha: 1)
+)
+private let blackholeSidebarFill = quietDynamicNSColor(
+    light: NSColor(calibratedWhite: 0.88, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.10, alpha: 1)
+)
+private let blackholeBorder = quietDynamicNSColor(
+    light: NSColor.black.withAlphaComponent(0.12),
+    dark: NSColor.white.withAlphaComponent(0.11)
+)
 private let quietThinkingLevelOrder = ["off", "minimal", "low", "medium", "high", "xhigh"]
 
 private func closestThinkingLevel(to requestedLevel: String, in supportedLevels: [String]) -> String {
@@ -464,14 +491,14 @@ struct GlassIconBacking: NSViewRepresentable {
         view.layer?.cornerRadius = cornerRadius
         view.layer?.cornerCurve = .continuous
         view.layer?.masksToBounds = true
-        view.layer?.backgroundColor = blackholePanelFill.cgColor
+        view.layer?.backgroundColor = quietResolvedCGColor(blackholePanelFill, colorScheme: context.environment.colorScheme)
         view.layer?.borderWidth = 0
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         nsView.layer?.cornerRadius = cornerRadius
-        nsView.layer?.backgroundColor = blackholePanelFill.cgColor
+        nsView.layer?.backgroundColor = quietResolvedCGColor(blackholePanelFill, colorScheme: context.environment.colorScheme)
     }
 }
 
@@ -485,7 +512,7 @@ struct GlassIconButtonLabel: View {
     var body: some View {
         let radius = cornerRadius ?? size / 2
         LucideIcon(id: iconId, fallbackSystemName: fallbackSystemName)
-            .foregroundStyle(.white.opacity(0.92))
+            .foregroundStyle(quietChatText.opacity(0.92))
             .frame(width: iconSize, height: iconSize)
             .frame(width: size, height: size)
             .background {
@@ -496,7 +523,7 @@ struct GlassIconButtonLabel: View {
                     }
                     .overlay {
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .stroke(.white.opacity(0.12), lineWidth: 0.7)
+                            .stroke(quietHairline, lineWidth: 0.7)
                     }
             }
             .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
@@ -1597,7 +1624,7 @@ struct QuietView: View {
                 store.inputContainsPastedResource = false
             }
         }
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(store.appearanceMode.colorScheme)
     }
 
     private var chatPage: some View {
@@ -1897,7 +1924,7 @@ struct QuietView: View {
 
             Text(quietAppName)
                 .font(.system(size: 19, weight: .semibold).italic())
-                .foregroundStyle(.white)
+                .foregroundStyle(quietChatText)
                 .shadow(color: .black.opacity(0.22), radius: 0.35, x: 0, y: 0.35)
 
             Spacer()
@@ -2293,7 +2320,7 @@ struct SessionSidebarRow: View {
             Button(action: onDelete) {
                 LucideIcon(id: "trash-2", fallbackSystemName: "trash")
                     .frame(width: 12, height: 12)
-                    .foregroundStyle(.white.opacity(0.72))
+                    .foregroundStyle(quietChatText.opacity(0.72))
                     .frame(width: 23, height: 23)
                     .background(quietSelectedFill, in: Circle())
             }
@@ -2328,7 +2355,7 @@ struct SessionSidebarRow: View {
         if isHovered {
             return quietHoverFill
         }
-        return Color.white.opacity(0.001)
+        return quietHoverFill.opacity(0.001)
     }
 }
 
@@ -3463,11 +3490,11 @@ struct ToolCallBubble: View {
     private var statusColor: Color {
         switch message.toolStatus {
         case .running:
-            .white.opacity(0.72)
+            quietNonUserMessageText.opacity(0.72)
         case .finished:
-            .white.opacity(0.82)
+            quietNonUserMessageText.opacity(0.82)
         case .failed:
-            .white.opacity(0.58)
+            quietNonUserMessageText.opacity(0.58)
         }
     }
 }
@@ -3594,6 +3621,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var frameKeeper: WindowFrameKeeper?
     private var statusItem: NSStatusItem?
     private weak var chromeRootView: NSView?
+    private weak var hostingView: NSView?
     private var appearanceObserver: NSObjectProtocol?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -3612,17 +3640,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         blackChromeView.layer?.cornerRadius = 24
         blackChromeView.layer?.cornerCurve = .continuous
         blackChromeView.layer?.masksToBounds = true
-        blackChromeView.layer?.backgroundColor = blackholeWindowFill.cgColor
+        blackChromeView.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: nil)
         blackChromeView.layer?.borderWidth = 0.8
-        blackChromeView.layer?.borderColor = blackholeBorder.cgColor
+        blackChromeView.layer?.borderColor = quietResolvedCGColor(blackholeBorder, appearance: nil)
         blackChromeView.addSubview(contentView)
         rootView = blackChromeView
         chromeRootView = rootView
 
         let hostingView = NSHostingView(rootView: QuietView())
         hostingView.translatesAutoresizingMaskIntoConstraints = false
-        hostingView.layer?.backgroundColor = blackholeWindowFill.cgColor
+        hostingView.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: nil)
         contentView.addSubview(hostingView)
+        self.hostingView = hostingView
 
         NSLayoutConstraint.activate([
             contentView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
@@ -3732,17 +3761,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyAppearance(_ mode: QuietAppearanceMode) {
-        let darkAppearance = NSAppearance(named: .darkAqua)
-        NSApp.appearance = darkAppearance
-        window?.appearance = darkAppearance
-        chromeRootView?.appearance = darkAppearance
+        let appearance = mode.nsAppearance
+        NSApp.appearance = appearance
+        window?.appearance = appearance
+        chromeRootView?.appearance = appearance
         updateChromeBorder()
     }
 
     private func updateChromeBorder() {
         guard let chromeRootView else { return }
-        chromeRootView.layer?.backgroundColor = blackholeWindowFill.cgColor
-        chromeRootView.layer?.borderColor = blackholeBorder.cgColor
+        let appearance = chromeRootView.effectiveAppearance
+        chromeRootView.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: appearance)
+        chromeRootView.layer?.borderColor = quietResolvedCGColor(blackholeBorder, appearance: appearance)
+        chromeRootView.subviews.forEach { subview in
+            subview.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: appearance)
+        }
+        hostingView?.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: appearance)
     }
 
     @objc private func toggleWindowFromStatusItem() {
