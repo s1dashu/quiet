@@ -4519,7 +4519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.invalidateShadow()
-        window.level = .popUpMenu
+        window.level = .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.isMovableByWindowBackground = false
         window.minSize = quietWindowMinimumSize
@@ -4571,6 +4571,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return false
         }
         return true
+    }
+
+    func applicationDidResignActive(_ notification: Notification) {
+        guard windowMode == .menuBar,
+              window?.isVisible == true else {
+            return
+        }
+        window?.orderOut(nil)
     }
 
     private func setupMainMenu() {
@@ -4686,16 +4694,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func presentMenuBarWindow(_ window: NSWindow) {
         configureWindowForMenuBarIfNeeded()
         positionWindowUnderStatusItem(window)
-        window.level = .popUpMenu
-        window.orderFrontRegardless()
+        window.level = .normal
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         alignDesktopTrafficLights()
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window else { return }
             self.positionWindowUnderStatusItem(window)
-            window.level = .popUpMenu
-            window.orderFrontRegardless()
+            window.level = .normal
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             self.alignDesktopTrafficLights()
@@ -4729,7 +4735,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frameKeeper?.frameStorageKey = Self.menuBarWindowFrameKey
         NSApp.setActivationPolicy(.accessory)
         window.styleMask = [.titled, .fullSizeContentView, .resizable]
-        window.level = .popUpMenu
+        window.level = .normal
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.isMovableByWindowBackground = false
         window.titleVisibility = .hidden
