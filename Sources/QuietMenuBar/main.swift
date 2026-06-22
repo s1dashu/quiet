@@ -1380,9 +1380,12 @@ final class AgentStore: ObservableObject {
         let url = documents.appendingPathComponent("Blackhole", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         [
-            "00 Inbox 待整理",
-            "01 Needs Review 需确认",
-            "09 System Archive 系统归档",
+            "00-09 System management/00 System management/00.00 Index for Blackhole",
+            "00-09 System management/00 System management/00.01 Inbox for Blackhole",
+            "00-09 System management/00 System management/00.02 Task & project management for Blackhole",
+            "00-09 System management/00 System management/00.03 Templates for Blackhole",
+            "00-09 System management/00 System management/00.08 Someday for Blackhole",
+            "00-09 System management/00 System management/00.09 Archive for Blackhole",
             "10-19 Personal 个人",
             "20-29 Money 财务",
             "30-39 Work 工作",
@@ -1427,14 +1430,18 @@ final class AgentStore: ObservableObject {
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
 
-            ## Quiet Decimal Taxonomy
+            ## Johnny.Decimal System
 
-            - Use Blackhole's Johnny.Decimal-inspired default structure.
-            - New drops enter `00 Inbox 待整理`.
-            - Put resources that need user confirmation in `01 Needs Review 需确认`.
-            - Put user-readable system records in `09 System Archive 系统归档`; do not put original user resources there.
+            - Use Blackhole's Johnny.Decimal structure directly.
+            - New drops enter `00-09 System management/00 System management/00.01 Inbox for Blackhole`.
+            - The index lives in `00-09 System management/00 System management/00.00 Index for Blackhole`.
+            - In-progress or unfiled resources stay in `00.01 Inbox for Blackhole`.
+            - Tasks and project-management material belongs in `00.02 Task & project management for Blackhole`.
+            - Templates belong in `00.03 Templates for Blackhole`.
+            - Someday material belongs in `00.08 Someday for Blackhole`.
+            - Completed or inactive system-management material belongs in `00.09 Archive for Blackhole`.
             - Prefer existing numbered areas over creating new top-level folders.
-            - Use `90-99 Archive 归档` for old/completed user resources, not `09 System Archive 系统归档`.
+            - User resources that are old/completed belong in `90-99 Archive 归档`; system-management archive material belongs in `00.09 Archive for Blackhole`.
 
             ## Default Numbered Areas
 

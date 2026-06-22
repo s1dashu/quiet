@@ -22,11 +22,14 @@ Treat the SwiftPM `QuietMenuBar` target as the active app. Build output under `.
 - App name: `Quiet`.
 - Runtime data root: `~/.quiet`.
 - User-visible content root: `~/Documents/Blackhole`.
-- Dragged files first go to visible inbox batches under `~/Documents/Blackhole/00 Inbox 待整理/<batch-id>`.
-- The pi agent organizes files using the default Quiet Decimal structure, inspired by Johnny.Decimal:
-  - `00 Inbox 待整理` for new drops and in-progress batches.
-  - `01 Needs Review 需确认` for low-confidence, sensitive/conflicting, duplicate-conflicting, or user-confirmation-needed resources.
-  - `09 System Archive 系统归档` for Blackhole-created user-readable system archive records only, not original user resources.
+- Dragged files first go to visible inbox batches under `~/Documents/Blackhole/00-09 System management/00 System management/00.01 Inbox for Blackhole/<batch-id>`.
+- The pi agent organizes files using the Johnny.Decimal structure directly:
+  - `00-09 System management/00 System management/00.00 Index for Blackhole` for the system index.
+  - `00-09 System management/00 System management/00.01 Inbox for Blackhole` for new drops, in-progress material, and resources that still need human judgment.
+  - `00-09 System management/00 System management/00.02 Task & project management for Blackhole` for task/project-management material.
+  - `00-09 System management/00 System management/00.03 Templates for Blackhole` for templates.
+  - `00-09 System management/00 System management/00.08 Someday for Blackhole` for someday material.
+  - `00-09 System management/00 System management/00.09 Archive for Blackhole` for completed or inactive system-management material.
   - `10-19 Personal 个人`, `20-29 Money 财务`, `30-39 Work 工作`, `40-49 Legal & Admin 法务行政`, `50-59 Assets & Property 资产`, and `90-99 Archive 归档` for organized user resources.
 - Keep generated or explanatory content in chat unless the user explicitly asks for files.
 - Undo logs go to `~/.blackhole/undo`.

@@ -23,7 +23,7 @@
 
 Blackhole is a tiny menu-bar app for macOS that tidies files, links, snippets, and saved references so you don't have to.
 
-You drag files and folders onto its icon, or paste links and text directly into the window. Blackhole figures out what they are, places new drops in a visible `00 Inbox 待整理`, and moves everything into a clean Quiet Decimal folder system on your own Mac. No account, no Blackhole-hosted cloud, and no telemetry.
+You drag files and folders onto its icon, or paste links and text directly into the window. Blackhole figures out what they are, places new drops in a visible Johnny.Decimal inbox, and moves everything into a clean numbered folder system on your own Mac. No account, no Blackhole-hosted cloud, and no telemetry.
 
 It's like a smart `~/Documents` that absorbs loose resources and sorts itself from the menu bar.
 
@@ -46,7 +46,7 @@ It's like a smart `~/Documents` that absorbs loose resources and sorts itself fr
 You drop files, paste links, or paste snippets
               │
               ▼
-    Blackhole places them in 00 Inbox 待整理
+    Blackhole places them in 00.01 Inbox for Blackhole
               │
               ▼
     The local agent inspects content, follows your rules,
@@ -58,7 +58,7 @@ You drop files, paste links, or paste snippets
 
 1. **Drop or paste anything** — files, folders, screenshots, archives, URLs, notes, prompts, and copied references.
 2. **Blackhole understands them** — it reads filenames, saved link files, snippets, and content to decide where each resource belongs.
-3. **Everything lands in `~/Documents/Blackhole`** — resources use Quiet Decimal, a Johnny.Decimal-inspired numbered structure with `00 Inbox 待整理`, `01 Needs Review 需确认`, `09 System Archive 系统归档`, and stable areas such as `20-29 Money 财务` or `30-39 Work 工作`.
+3. **Everything lands in `~/Documents/Blackhole`** — resources use a Johnny.Decimal numbered structure with `00-09 System management/00 System management/00.01 Inbox for Blackhole` and stable areas such as `20-29 Money 财务` or `30-39 Work 工作`.
 
 If you tell Blackhole "I like links sorted by research topic," it writes that rule to `~/.blackhole/memory.md`. From then on, it follows your preference automatically.
 
@@ -128,10 +128,10 @@ Blackhole reads `~/.blackhole/memory.md` for your resource-organizing preference
 ```markdown
 # Blackhole Memory
 
-## Quiet Decimal Taxonomy
-- New drops enter 00 Inbox 待整理.
-- Low-confidence or user-confirmation-needed resources go to 01 Needs Review 需确认.
-- User-readable system archive records go to 09 System Archive 系统归档.
+## Johnny.Decimal System
+- New drops enter 00-09 System management/00 System management/00.01 Inbox for Blackhole.
+- Low-confidence or user-confirmation-needed resources stay in 00.01 Inbox for Blackhole.
+- System-management archive material goes to 00.09 Archive for Blackhole.
 - Money resources go under 20-29 Money 财务.
 ```
 
