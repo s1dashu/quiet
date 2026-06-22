@@ -1695,7 +1695,7 @@ struct QuietView: View {
                     SessionOverlayPanel(
                         sessions: store.sessions,
                         currentSessionPath: store.currentSessionPath,
-                        topContentInset: 8,
+                        topContentInset: quietHeaderHeight + 8,
                         onSelect: { session in
                             store.openSession(session)
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -1708,7 +1708,7 @@ struct QuietView: View {
                     )
                     .frame(width: sidebarWidth)
                     .frame(maxHeight: .infinity)
-                    .padding(.top, quietHeaderHeight)
+                    .ignoresSafeArea()
                     .transition(.move(edge: .leading).combined(with: .opacity))
                     .zIndex(2)
                 }
