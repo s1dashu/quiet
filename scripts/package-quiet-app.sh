@@ -11,6 +11,8 @@ CONFIGURATION="${CONFIGURATION:-release}"
 ICON_COMPOSER_DIR="$ROOT_DIR/assets/app-icon/quiet-icon.icon"
 ICTOOL="/Applications/Icon Composer.app/Contents/Executables/ictool"
 ICON_SOURCE="$ROOT_DIR/assets/app-icon/quiet-icon-1024.png"
+NODE_ENTITLEMENTS="$ROOT_DIR/scripts/node.entitlements"
+SIGN_ID="${SIGN_ID:-}"
 
 cd "$ROOT_DIR"
 BUILD_DIR="$(swift build --configuration "$CONFIGURATION" --show-bin-path)"
@@ -106,5 +108,27 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+
+if [[ -n "$SIGN_ID" ]]; then
+  xattr -cr "$APP_DIR"
+
+  while IFS= read -r -d '' file; do
+    if file "$file" | grep -q 'Mach-O'; then
+      codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$file"
+    fi
+  done < <(find "$APP_DIR" -type f -name '*.node' -print0)
+
+  codesign \
+    --force \
+    --options runtime \
+    --timestamp \
+    --entitlements "$NODE_ENTITLEMENTS" \
+    --sign "$SIGN_ID" \
+    "$APP_RESOURCE_BUNDLE/Resources/node"
+
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$MACOS_DIR/Quiet"
+  codesign --force --options runtime --timestamp --sign "$SIGN_ID" "$APP_DIR"
+  codesign --verify --deep --strict --verbose=2 "$APP_DIR"
+fi
 
 echo "$APP_DIR"
