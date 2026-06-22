@@ -6,14 +6,17 @@
     {
       "layers" : [
         {
+          "blend-mode" : "normal",
+          "fill" : "none",
           "glass" : false,
-          "image-name" : "ig_0c4cbd75e30b070b016a3171fa635c81919e99710a29326619.png",
-          "name" : "ig_0c4cbd75e30b070b016a3171fa635c81919e99710a29326619",
+          "image-name" : "ig_0868c19b9396f42b016a388631835481919cc2cac4711c3d14.png",
+          "name" : "ig_0868c19b9396f42b016a388631835481919cc2cac4711c3d14",
+          "opacity" : 1,
           "position" : {
-            "scale" : 1,
+            "scale" : 0.83,
             "translation-in-points" : [
-              -115,
-              -115
+              0,
+              0
             ]
           }
         }
