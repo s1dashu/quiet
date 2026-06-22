@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import LucideIcons
 import MarkdownUI
 import SwiftUI
@@ -4437,8 +4438,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case desktop
     }
 
+    private enum MenuBarPresentationSource {
+        case statusItem
+        case keyboardShortcut
+    }
+
     private static let menuBarWindowFrameKey = "quiet.window.frame"
     private static let desktopWindowFrameKey = "quiet.desktop.window.frame"
+    private static let shortcutHotKeySignature: OSType = 0x51756974
+    private static let shortcutHotKeyID: UInt32 = 1
+    private static weak var sharedDelegate: AppDelegate?
 
     private var window: NSWindow?
     private var frameKeeper: WindowFrameKeeper?
@@ -4448,12 +4457,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var appearanceObserver: NSObjectProtocol?
     private var desktopClientObserver: NSObjectProtocol?
     private var windowMode: WindowMode = .menuBar
+    private var menuBarPresentationSource: MenuBarPresentationSource = .statusItem
+    private var shortcutHotKeyRef: EventHotKeyRef?
+    private var shortcutHotKeyEventHandler: EventHandlerRef?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        Self.sharedDelegate = self
         applyApplicationIcon()
         NSApp.setActivationPolicy(.accessory)
         setupMainMenu()
         setupStatusItem()
+        setupGlobalShortcut()
 
         let rootView = NSView()
         rootView.wantsLayer = true
@@ -4575,6 +4589,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidResignActive(_ notification: Notification) {
         guard windowMode == .menuBar,
+              menuBarPresentationSource == .statusItem,
               window?.isVisible == true else {
             return
         }
@@ -4626,6 +4641,62 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.sendAction(on: [.leftMouseDown, .rightMouseUp])
         }
         self.statusItem = statusItem
+    }
+
+    private func setupGlobalShortcut() {
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard),
+            eventKind: UInt32(kEventHotKeyPressed)
+        )
+        let handlerStatus = InstallEventHandler(
+            GetApplicationEventTarget(),
+            { _, event, _ in
+                guard let event else { return noErr }
+                var hotKeyID = EventHotKeyID()
+                let status = GetEventParameter(
+                    event,
+                    EventParamName(kEventParamDirectObject),
+                    EventParamType(typeEventHotKeyID),
+                    nil,
+                    MemoryLayout<EventHotKeyID>.size,
+                    nil,
+                    &hotKeyID
+                )
+                guard status == noErr,
+                      hotKeyID.signature == AppDelegate.shortcutHotKeySignature,
+                      hotKeyID.id == AppDelegate.shortcutHotKeyID else {
+                    return noErr
+                }
+                Task { @MainActor in
+                    AppDelegate.sharedDelegate?.toggleWindowFromKeyboardShortcut()
+                }
+                return noErr
+            },
+            1,
+            &eventType,
+            nil,
+            &shortcutHotKeyEventHandler
+        )
+        if handlerStatus != noErr {
+            NSLog("Quiet failed to install global shortcut handler: \(handlerStatus)")
+            return
+        }
+
+        let hotKeyID = EventHotKeyID(
+            signature: Self.shortcutHotKeySignature,
+            id: Self.shortcutHotKeyID
+        )
+        let hotKeyStatus = RegisterEventHotKey(
+            UInt32(kVK_Space),
+            UInt32(optionKey),
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &shortcutHotKeyRef
+        )
+        if hotKeyStatus != noErr {
+            NSLog("Quiet failed to register Option-Space shortcut: \(hotKeyStatus)")
+        }
     }
 
     private func applyAppearance(_ mode: QuietAppearanceMode) {
@@ -4688,20 +4759,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        presentMenuBarWindow(window)
+        presentMenuBarWindow(window, source: .statusItem)
     }
 
-    private func presentMenuBarWindow(_ window: NSWindow) {
+    private func toggleWindowFromKeyboardShortcut() {
+        guard let window else { return }
+
+        if windowMode == .menuBar, window.isVisible {
+            window.orderOut(nil)
+            return
+        }
+
+        presentMenuBarWindow(window, source: .keyboardShortcut)
+    }
+
+    private func presentMenuBarWindow(_ window: NSWindow, source: MenuBarPresentationSource) {
         configureWindowForMenuBarIfNeeded()
-        positionWindowUnderStatusItem(window)
-        window.level = .normal
+        menuBarPresentationSource = source
+        positionMenuBarWindow(window, source: source)
+        window.level = menuBarWindowLevel(for: source)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         alignDesktopTrafficLights()
         DispatchQueue.main.async { [weak self] in
             guard let self, let window = self.window else { return }
-            self.positionWindowUnderStatusItem(window)
-            window.level = .normal
+            self.positionMenuBarWindow(window, source: source)
+            window.level = self.menuBarWindowLevel(for: source)
             NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
             self.alignDesktopTrafficLights()
@@ -4732,6 +4815,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         window.orderOut(nil)
         windowMode = .menuBar
+        menuBarPresentationSource = .statusItem
         frameKeeper?.frameStorageKey = Self.menuBarWindowFrameKey
         NSApp.setActivationPolicy(.accessory)
         window.styleMask = [.titled, .fullSizeContentView, .resizable]
@@ -4871,6 +4955,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    private func positionMenuBarWindow(_ window: NSWindow, source: MenuBarPresentationSource) {
+        switch source {
+        case .statusItem:
+            positionWindowUnderStatusItem(window)
+        case .keyboardShortcut:
+            positionWindowAtTopRight(window)
+        }
+    }
+
+    private func menuBarWindowLevel(for source: MenuBarPresentationSource) -> NSWindow.Level {
+        switch source {
+        case .statusItem:
+            .normal
+        case .keyboardShortcut:
+            .floating
+        }
+    }
+
     private func positionWindowUnderStatusItem(_ window: NSWindow) {
         guard let button = statusItem?.button,
               let buttonWindow = button.window,
@@ -4895,6 +4997,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let y = max(targetY, visibleFrame.minY + margin)
 
         window.setFrameOrigin(NSPoint(x: x, y: y))
+    }
+
+    private func positionWindowAtTopRight(_ window: NSWindow) {
+        let screen = NSScreen.main ?? window.screen
+        let visibleFrame = screen?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+        let margin: CGFloat = 18
+        let windowSize = window.frame.size
+        let x = visibleFrame.maxX - windowSize.width - margin
+        let y = visibleFrame.maxY - windowSize.height - margin
+        window.setFrameOrigin(NSPoint(
+            x: max(visibleFrame.minX + margin, x),
+            y: max(visibleFrame.minY + margin, y)
+        ))
     }
 
     private static func savedFrame(key: String, minimumSize: NSSize) -> NSRect? {
