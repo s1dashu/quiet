@@ -10,7 +10,6 @@ private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 580)
 private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 460)
 private let quietHeaderHeight: CGFloat = 54
-private let quietDesktopTitlebarInset: CGFloat = 30
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
@@ -273,7 +272,6 @@ struct QuietCopy {
     let quietRules: String
     let editQuietRules: String
     let quietRulesHelp: String
-    let save: String
     let saveAndRestart: String
     let newSession: String
     let moreActions: String
@@ -321,7 +319,6 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             quietRules: "Resource organizing rules",
             editQuietRules: "Edit resource organizing rules",
             quietRulesHelp: "Open ~/.blackhole/memory.md. Restart the agent after saving.",
-            save: "Save",
             saveAndRestart: "Save and restart agent",
             newSession: "New session",
             moreActions: "More actions",
@@ -366,7 +363,6 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             quietRules: "资源整理规则",
             editQuietRules: "编辑资源整理规则",
             quietRulesHelp: "打开 ~/.blackhole/memory.md，保存后重启 agent 生效",
-            save: "保存",
             saveAndRestart: "保存并重启 agent",
             newSession: "新建会话",
             moreActions: "更多操作",
@@ -402,7 +398,6 @@ private extension Notification.Name {
     static let quietFocusComposer = Notification.Name("QuietFocusComposer")
     static let quietAppearanceDidChange = Notification.Name("QuietAppearanceDidChange")
     static let quietOpenDesktopClient = Notification.Name("QuietOpenDesktopClient")
-    static let quietWindowChromeModeDidChange = Notification.Name("QuietWindowChromeModeDidChange")
 }
 
 private func fileURL(fromDropItem item: NSSecureCoding?) -> URL? {
@@ -1423,6 +1418,11 @@ final class AgentStore: ObservableObject {
         NotificationCenter.default.post(name: .quietAppearanceDidChange, object: mode.rawValue)
     }
 
+    func applyLanguage(_ nextLanguage: QuietLanguage) {
+        language = nextLanguage.rawValue
+        UserDefaults.standard.set(language, forKey: "quiet.language")
+    }
+
     func saveSettings(language: String, provider: String, model: String, apiKey: String, thinking: String, appearance: String) {
         let nextLanguage = QuietLanguage.normalized(language)
         let nextProvider = provider.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1437,13 +1437,12 @@ final class AgentStore: ObservableObject {
             || modelApiKey != nextApiKey
             || thinkingLevel != nextThinking
 
-        self.language = nextLanguage.rawValue
+        applyLanguage(nextLanguage)
         modelProvider = nextProvider
         modelId = nextModel
         modelApiKey = nextApiKey
         thinkingLevel = nextThinking
         applyAppearanceMode(nextAppearance)
-        UserDefaults.standard.set(self.language, forKey: "quiet.language")
         UserDefaults.standard.set(modelProvider, forKey: "quiet.model.provider")
         UserDefaults.standard.set(modelId, forKey: "quiet.model.id")
         QuietSecrets.saveModelApiKey(modelApiKey)
@@ -2740,14 +2739,6 @@ struct SettingsPanel: View {
         let selectedModel = modelOptions.first(where: { $0.modelId == model }) ?? modelOptions.first
         let thinkingOptions = (selectedModel?.thinkingLevels ?? ["off", "minimal", "low", "medium", "high"])
             .map { (value: $0, label: thinkingLevelLabel($0)) }
-        let clampedThinking = closestThinkingLevel(
-            to: thinking,
-            in: selectedModel?.thinkingLevels ?? ["off", "minimal", "low", "medium", "high"]
-        )
-        let shouldRestartAgent = provider.trimmingCharacters(in: .whitespacesAndNewlines) != store.modelProvider
-            || model.trimmingCharacters(in: .whitespacesAndNewlines) != store.modelId
-            || apiKey.trimmingCharacters(in: .whitespacesAndNewlines) != store.modelApiKey
-            || clampedThinking != store.thinkingLevel
 
         VStack(spacing: 0) {
             HStack(spacing: 9) {
@@ -2773,14 +2764,16 @@ struct SettingsPanel: View {
                         rulesSection(copy: copy)
 
                         SettingsPickerField(title: copy.language, selection: $language, options: QuietLanguage.allCases.map { (value: $0.rawValue, label: $0.label) })
-                            .onChange(of: language) { _, _ in
-                                store.language = QuietLanguage.normalized(language).rawValue
+                            .onChange(of: language) { _, nextLanguage in
+                                store.applyLanguage(QuietLanguage.normalized(nextLanguage))
                             }
 
                         SettingsPickerField(title: copy.appearance, selection: $appearance, options: appearanceOptions(copy: copy))
                             .onChange(of: appearance) { _, nextAppearance in
                                 store.applyAppearanceMode(QuietAppearanceMode.normalized(nextAppearance))
                             }
+
+                        modelSectionDivider
 
                         SettingsPickerField(
                             title: copy.provider,
@@ -2810,7 +2803,7 @@ struct SettingsPanel: View {
                             store.saveSettings(language: language, provider: provider, model: model, apiKey: apiKey, thinking: thinking, appearance: appearance)
                             onClose()
                         } label: {
-                            Text(shouldRestartAgent ? copy.saveAndRestart : copy.save)
+                            Text(copy.saveAndRestart)
                                 .font(.system(size: 12, weight: .semibold))
                                 .frame(maxWidth: .infinity)
                                 .padding(.vertical, 9)
@@ -2892,6 +2885,14 @@ struct SettingsPanel: View {
                         .stroke(focusedField == .apiKey ? quietChatText.opacity(0.32) : quietSettingsControlBorder, lineWidth: 0.8)
                 }
         }
+    }
+
+    private var modelSectionDivider: some View {
+        Rectangle()
+            .fill(quietHairline)
+            .frame(height: 0.8)
+            .padding(.top, 4)
+            .padding(.bottom, 2)
     }
 
     private func rulesSection(copy: QuietCopy) -> some View {
