@@ -7,6 +7,8 @@ import UniformTypeIdentifiers
 private let quietAppName = "Blackhole"
 private let quietWindowDefaultSize = NSSize(width: 380, height: 520)
 private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
+private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 580)
+private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 460)
 private let quietHeaderHeight: CGFloat = 54
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
@@ -261,6 +263,7 @@ struct QuietCopy {
     let saveAndRestart: String
     let newSession: String
     let moreActions: String
+    let openDesktopClient: String
     let openFiles: String
     let quit: String
     let composerPlaceholder: String
@@ -307,6 +310,7 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             saveAndRestart: "Save and restart agent",
             newSession: "New session",
             moreActions: "More actions",
+            openDesktopClient: "Open desktop app",
             openFiles: "Open files",
             quit: "Quit Blackhole",
             composerPlaceholder: "Paste links, snippets, or type a message...",
@@ -350,6 +354,7 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             saveAndRestart: "保存并重启 agent",
             newSession: "新建会话",
             moreActions: "更多操作",
+            openDesktopClient: "打开桌面客户端",
             openFiles: "打开文件夹",
             quit: "退出 Blackhole",
             composerPlaceholder: "粘贴链接、片段，或输入消息...",
@@ -380,6 +385,7 @@ struct ModelProviderOption: Identifiable, Equatable {
 private extension Notification.Name {
     static let quietFocusComposer = Notification.Name("QuietFocusComposer")
     static let quietAppearanceDidChange = Notification.Name("QuietAppearanceDidChange")
+    static let quietOpenDesktopClient = Notification.Name("QuietOpenDesktopClient")
 }
 
 private func fileURL(fromDropItem item: NSSecureCoding?) -> URL? {
@@ -1945,6 +1951,12 @@ struct QuietView: View {
                     store.openFiles()
                 } label: {
                     Label(store.copy.openFiles, systemImage: "folder")
+                }
+
+                Button {
+                    NotificationCenter.default.post(name: .quietOpenDesktopClient, object: nil)
+                } label: {
+                    Label(store.copy.openDesktopClient, systemImage: "macwindow")
                 }
 
                 Button {
@@ -3617,12 +3629,22 @@ final class QuietWindow: NSWindow {
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    private enum WindowMode {
+        case menuBar
+        case desktop
+    }
+
+    private static let menuBarWindowFrameKey = "quiet.window.frame"
+    private static let desktopWindowFrameKey = "quiet.desktop.window.frame"
+
     private var window: NSWindow?
     private var frameKeeper: WindowFrameKeeper?
     private var statusItem: NSStatusItem?
     private weak var chromeRootView: NSView?
     private weak var hostingView: NSView?
     private var appearanceObserver: NSObjectProtocol?
+    private var desktopClientObserver: NSObjectProtocol?
+    private var windowMode: WindowMode = .menuBar
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -3672,7 +3694,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             height: quietWindowDefaultSize.height
         )
         let window = QuietWindow(
-            contentRect: Self.savedFrame() ?? defaultFrame,
+            contentRect: Self.savedFrame(
+                key: Self.menuBarWindowFrameKey,
+                minimumSize: quietWindowMinimumSize
+            ) ?? defaultFrame,
             styleMask: [.borderless, .fullSizeContentView, .resizable],
             backing: .buffered,
             defer: false
@@ -3692,6 +3717,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.orderOut(nil)
 
         let frameKeeper = WindowFrameKeeper()
+        frameKeeper.frameStorageKey = Self.menuBarWindowFrameKey
         window.delegate = frameKeeper
         self.frameKeeper = frameKeeper
         self.window = window
@@ -3707,10 +3733,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.applyAppearance(QuietAppearanceMode.normalized(raw))
             }
         }
+
+        desktopClientObserver = NotificationCenter.default.addObserver(
+            forName: .quietOpenDesktopClient,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.openDesktopClient()
+            }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         false
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if windowMode == .desktop, !flag {
+            openDesktopClient()
+            return false
+        }
+        return true
     }
 
     private func setupMainMenu() {
@@ -3800,12 +3844,85 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        configureWindowForMenuBarIfNeeded()
         positionWindowUnderStatusItem(window)
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
             NotificationCenter.default.post(name: .quietFocusComposer, object: nil)
         }
+    }
+
+    private func openDesktopClient() {
+        guard let window else { return }
+
+        configureWindowForDesktopIfNeeded()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
+            NotificationCenter.default.post(name: .quietFocusComposer, object: nil)
+        }
+    }
+
+    private func configureWindowForMenuBarIfNeeded() {
+        guard windowMode != .menuBar, let window else { return }
+
+        window.orderOut(nil)
+        windowMode = .menuBar
+        frameKeeper?.frameStorageKey = Self.menuBarWindowFrameKey
+        NSApp.setActivationPolicy(.accessory)
+        window.styleMask = [.borderless, .fullSizeContentView, .resizable]
+        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
+        window.isMovableByWindowBackground = false
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.minSize = quietWindowMinimumSize
+        window.contentMinSize = quietWindowMinimumSize
+        window.isOpaque = false
+        window.backgroundColor = .clear
+        chromeRootView?.layer?.cornerRadius = 24
+        chromeRootView?.layer?.borderWidth = 0.8
+
+        if let savedFrame = Self.savedFrame(key: Self.menuBarWindowFrameKey, minimumSize: quietWindowMinimumSize) {
+            window.setFrame(savedFrame, display: false)
+        } else {
+            window.setContentSize(quietWindowDefaultSize)
+        }
+        updateChromeBorder()
+    }
+
+    private func configureWindowForDesktopIfNeeded() {
+        guard windowMode != .desktop, let window else { return }
+
+        window.orderOut(nil)
+        windowMode = .desktop
+        frameKeeper?.frameStorageKey = Self.desktopWindowFrameKey
+        NSApp.setActivationPolicy(.regular)
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.collectionBehavior = [.fullScreenPrimary]
+        window.isMovableByWindowBackground = true
+        window.title = quietAppName
+        window.titleVisibility = .visible
+        window.titlebarAppearsTransparent = false
+        window.minSize = quietDesktopWindowMinimumSize
+        window.contentMinSize = quietDesktopWindowMinimumSize
+        window.isOpaque = false
+        window.backgroundColor = .windowBackgroundColor
+        chromeRootView?.layer?.cornerRadius = 0
+        chromeRootView?.layer?.borderWidth = 0
+
+        if let savedFrame = Self.savedFrame(key: Self.desktopWindowFrameKey, minimumSize: quietDesktopWindowMinimumSize) {
+            window.setFrame(savedFrame, display: false)
+        } else {
+            let screen = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
+            let size = quietDesktopWindowDefaultSize
+            let origin = NSPoint(
+                x: screen.midX - size.width / 2,
+                y: screen.midY - size.height / 2
+            )
+            window.setFrame(NSRect(origin: origin, size: size), display: false)
+        }
+        updateChromeBorder()
     }
 
     private func showStatusItemMenu() {
@@ -3865,15 +3982,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.setFrameOrigin(NSPoint(x: x, y: y))
     }
 
-    private static func savedFrame() -> NSRect? {
-        let raw = UserDefaults.standard.string(forKey: "quiet.window.frame")
+    private static func savedFrame(key: String, minimumSize: NSSize) -> NSRect? {
+        let raw = UserDefaults.standard.string(forKey: key)
         guard let raw, !raw.isEmpty else { return nil }
         var frame = NSRectFromString(raw)
-        if frame.width < quietWindowMinimumSize.width {
-            frame.size.width = quietWindowMinimumSize.width
+        if frame.width < minimumSize.width {
+            frame.size.width = minimumSize.width
         }
-        if frame.height < quietWindowMinimumSize.height {
-            frame.size.height = quietWindowMinimumSize.height
+        if frame.height < minimumSize.height {
+            frame.size.height = minimumSize.height
         }
         return frame
     }
@@ -3881,6 +3998,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 @MainActor
 final class WindowFrameKeeper: NSObject, NSWindowDelegate {
+    var frameStorageKey = "quiet.window.frame"
+
     func windowDidMove(_ notification: Notification) {
         save(notification)
     }
@@ -3891,7 +4010,7 @@ final class WindowFrameKeeper: NSObject, NSWindowDelegate {
 
     private func save(_ notification: Notification) {
         guard let window = notification.object as? NSWindow else { return }
-        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: "quiet.window.frame")
+        UserDefaults.standard.set(NSStringFromRect(window.frame), forKey: frameStorageKey)
     }
 }
 
