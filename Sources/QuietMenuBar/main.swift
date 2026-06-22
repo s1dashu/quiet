@@ -11,6 +11,7 @@ private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 540)
 private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
 private let quietHeaderHeight: CGFloat = 54
 private let quietDesktopHeaderLeadingInset: CGFloat = 78
+private let quietDesktopTrafficLightFallbackInset: CGFloat = 20
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
@@ -1615,6 +1616,13 @@ struct QuietView: View {
         isDesktopChromePresented ? quietDesktopHeaderLeadingInset : 0
     }
 
+    private func sidebarWidth(for width: CGFloat) -> CGFloat {
+        if isDesktopChromePresented {
+            return min(340, max(280, width * 0.28))
+        }
+        return min(224, max(168, width * 0.72))
+    }
+
     var body: some View {
         Group {
             if isSettingsPresented {
@@ -1668,7 +1676,7 @@ struct QuietView: View {
 
     private var chatPage: some View {
         GeometryReader { geometry in
-            let sidebarWidth = min(224, max(168, geometry.size.width * 0.72))
+            let sidebarWidth = sidebarWidth(for: geometry.size.width)
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
                     Color.clear
@@ -4007,10 +4015,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         let headerCenterInButtonSuperview = buttonSuperview.convert(headerCenterInContent, from: contentView)
         let deltaY = headerCenterInButtonSuperview.y - closeButton.frame.midY
+        let proposedCloseY = closeButton.frame.minY + deltaY
+        let topInset = buttonSuperview.bounds.maxY - (proposedCloseY + closeButton.frame.height)
+        let targetLeadingInset = topInset.isFinite && topInset > 0
+            ? topInset
+            : quietDesktopTrafficLightFallbackInset
+        let deltaX = targetLeadingInset - closeButton.frame.minX
 
-        guard abs(deltaY) > 0.5 else { return }
+        guard abs(deltaY) > 0.5 || abs(deltaX) > 0.5 else { return }
         for button in buttons {
-            button.setFrameOrigin(NSPoint(x: button.frame.minX, y: button.frame.minY + deltaY))
+            button.setFrameOrigin(NSPoint(
+                x: button.frame.minX + deltaX,
+                y: button.frame.minY + deltaY
+            ))
         }
     }
 
