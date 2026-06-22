@@ -2279,6 +2279,14 @@ struct QuietView: View {
                                 restoreFollowToLatest(proxy: proxy)
                             }
 
+                            if store.messages.isEmpty && !store.isLoadingHistory && !store.showTurnWaitIndicator {
+                                EmptyConversationHint()
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .padding(.bottom, 28)
+                                    .allowsHitTesting(false)
+                                    .transition(.opacity)
+                            }
+
                             if showFollowButton {
                                 HStack {
                                     Spacer(minLength: 0)
@@ -2678,6 +2686,22 @@ struct QuietView: View {
             return true
         }
         return store.sendCapturedPasteboardContent()
+    }
+}
+
+struct EmptyConversationHint: View {
+    var body: some View {
+        VStack(spacing: 10) {
+            LucideIcon(id: "keyboard", fallbackSystemName: "keyboard")
+                .frame(width: 22, height: 22)
+                .foregroundStyle(quietChatMutedText.opacity(0.72))
+
+            Text("使用 `Alt` + `Space` 快捷召唤 Quiet")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(quietChatMutedText.opacity(0.86))
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: 260)
     }
 }
 
@@ -4587,15 +4611,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return true
     }
 
-    func applicationDidResignActive(_ notification: Notification) {
-        guard windowMode == .menuBar,
-              menuBarPresentationSource == .statusItem,
-              window?.isVisible == true else {
-            return
-        }
-        window?.orderOut(nil)
-    }
-
     private func setupMainMenu() {
         let mainMenu = NSMenu()
 
@@ -4754,7 +4769,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func toggleWindowVisibility() {
         guard let window else { return }
 
-        if window.isVisible, window.isKeyWindow, NSApp.isActive {
+        if window.isVisible {
             window.orderOut(nil)
             return
         }
@@ -4967,7 +4982,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func menuBarWindowLevel(for source: MenuBarPresentationSource) -> NSWindow.Level {
         switch source {
         case .statusItem:
-            .normal
+            .floating
         case .keyboardShortcut:
             .floating
         }
