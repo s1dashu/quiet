@@ -114,6 +114,18 @@ private let quietPrimaryText = quietDynamicColor(
     light: NSColor.white,
     dark: NSColor.black
 )
+private let quietSecondaryButtonFill = quietDynamicColor(
+    light: NSColor.white,
+    dark: NSColor(calibratedWhite: 0.08, alpha: 1)
+)
+private let quietSecondaryButtonText = quietDynamicColor(
+    light: NSColor(calibratedWhite: 0.06, alpha: 1),
+    dark: NSColor(calibratedWhite: 0.94, alpha: 1)
+)
+private let quietSecondaryButtonBorder = quietDynamicColor(
+    light: NSColor.black.withAlphaComponent(0.14),
+    dark: NSColor.white.withAlphaComponent(0.16)
+)
 private let quietComposerFill = quietDynamicColor(
     light: NSColor(calibratedWhite: 0.91, alpha: 1),
     dark: NSColor(calibratedWhite: 0.09, alpha: 1)
@@ -135,11 +147,11 @@ private let quietMarkdownCodeFill = quietDynamicColor(
     dark: NSColor.black.withAlphaComponent(0.34)
 )
 private let blackholeWindowFill = quietDynamicNSColor(
-    light: NSColor(calibratedWhite: 0.965, alpha: 1),
+    light: NSColor.white,
     dark: NSColor(calibratedWhite: 0.015, alpha: 1)
 )
 private let blackholePanelFill = quietDynamicNSColor(
-    light: NSColor(calibratedWhite: 0.90, alpha: 1),
+    light: NSColor.white,
     dark: NSColor(calibratedWhite: 0.075, alpha: 1)
 )
 private let blackholeSidebarFill = quietDynamicNSColor(
@@ -515,6 +527,8 @@ struct GlassIconButtonLabel: View {
     var iconSize: CGFloat = 14
     var cornerRadius: CGFloat? = nil
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
         let radius = cornerRadius ?? size / 2
         LucideIcon(id: iconId, fallbackSystemName: fallbackSystemName)
@@ -532,7 +546,12 @@ struct GlassIconButtonLabel: View {
                             .stroke(quietHairline, lineWidth: 0.7)
                     }
             }
-            .shadow(color: .black.opacity(0.35), radius: 3, x: 0, y: 1)
+            .shadow(
+                color: .black.opacity(colorScheme == .dark ? 0.28 : 0.10),
+                radius: colorScheme == .dark ? 3 : 1.5,
+                x: 0,
+                y: colorScheme == .dark ? 1 : 0.5
+            )
     }
 }
 
@@ -1817,12 +1836,12 @@ struct QuietView: View {
                                         LucideIcon(id: "arrow-down", fallbackSystemName: "arrow.down")
                                             .frame(width: 15, height: 15)
                                             .frame(width: 30, height: 30)
-                                            .foregroundStyle(quietPrimaryText)
-                                            .background(quietPrimaryFill, in: Circle())
+                                            .foregroundStyle(quietSecondaryButtonText)
+                                            .background(quietSecondaryButtonFill, in: Circle())
                                             .overlay {
-                                                Circle().stroke(quietHairline, lineWidth: 0.6)
+                                                Circle().stroke(quietSecondaryButtonBorder, lineWidth: 0.8)
                                             }
-                                            .shadow(color: .black.opacity(0.18), radius: 12, x: 0, y: 5)
+                                            .shadow(color: .black.opacity(0.08), radius: 4, x: 0, y: 1)
                                     }
                                     .buttonStyle(.plain)
                                     .help("跟随到最新")
