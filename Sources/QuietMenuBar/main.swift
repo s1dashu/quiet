@@ -4,7 +4,7 @@ import MarkdownUI
 import SwiftUI
 import UniformTypeIdentifiers
 
-private let quietAppName = "Blackhole"
+private let quietAppName = "Quiet"
 private let quietWindowDefaultSize = NSSize(width: 380, height: 520)
 private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 540)
@@ -12,14 +12,22 @@ private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
 private let quietHeaderHeight: CGFloat = 54
 private let quietDesktopHeaderLeadingInset: CGFloat = 78
 private let quietDesktopTrafficLightFallbackInset: CGFloat = 20
-private let quietAppIconResourcePath = "app-icon/blackhole-app-icon.png"
+private let quietAppIconResourcePath = "app-icon/quiet-app-icon.png"
 private let quietSwiftPMResourceBundleName = "Quiet_QuietMenuBar.bundle"
+private let quietRuntimeDirectoryName = ".quiet"
+private let quietLegacyRuntimeDirectoryName = ".blackhole"
+private let quietContentDirectoryName = "Quiet"
+private let quietLegacyContentDirectoryName = "Blackhole"
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
 private let quietDropTypeIdentifiers = [
     UTType.fileURL.identifier,
     UTType.url.identifier,
+    UTType.image.identifier,
+    UTType.png.identifier,
+    UTType.jpeg.identifier,
+    UTType.tiff.identifier,
     UTType.plainText.identifier,
     UTType.utf8PlainText.identifier,
 ]
@@ -42,6 +50,65 @@ private func quietBundledResourceURL(path: String) -> URL? {
             .appendingPathComponent(path),
     ]
     return candidates.compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) }
+}
+
+private func quietApplicationSupportURL() -> URL {
+    let home = FileManager.default.homeDirectoryForCurrentUser
+    let url = home.appendingPathComponent(quietRuntimeDirectoryName, isDirectory: true)
+    let legacyURL = home.appendingPathComponent(quietLegacyRuntimeDirectoryName, isDirectory: true)
+    quietMigrateDirectoryIfNeeded(from: legacyURL, to: url)
+    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}
+
+private func quietContentRootURL() -> URL {
+    let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
+        ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
+    let url = documents.appendingPathComponent(quietContentDirectoryName, isDirectory: true)
+    let legacyURL = documents.appendingPathComponent(quietLegacyContentDirectoryName, isDirectory: true)
+    quietMigrateDirectoryIfNeeded(from: legacyURL, to: url)
+    try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}
+
+private func quietMigrateDirectoryIfNeeded(from legacyURL: URL, to url: URL) {
+    let fileManager = FileManager.default
+    guard legacyURL.path != url.path,
+          fileManager.fileExists(atPath: legacyURL.path) else {
+        return
+    }
+
+    if !fileManager.fileExists(atPath: url.path) {
+        try? fileManager.moveItem(at: legacyURL, to: url)
+        return
+    }
+
+    guard let entries = try? fileManager.contentsOfDirectory(at: legacyURL, includingPropertiesForKeys: nil) else {
+        return
+    }
+    for entry in entries {
+        let destination = quietUniqueDestination(in: url, named: entry.lastPathComponent)
+        try? fileManager.moveItem(at: entry, to: destination)
+    }
+    try? fileManager.removeItem(at: legacyURL)
+}
+
+private func quietUniqueDestination(in directory: URL, named name: String) -> URL {
+    let fileManager = FileManager.default
+    let baseURL = directory.appendingPathComponent(name)
+    guard fileManager.fileExists(atPath: baseURL.path) else { return baseURL }
+
+    let ext = baseURL.pathExtension
+    let stem = ext.isEmpty ? baseURL.lastPathComponent : String(baseURL.lastPathComponent.dropLast(ext.count + 1))
+    for index in 2...999 {
+        let candidateName = ext.isEmpty ? "\(stem) \(index)" : "\(stem) \(index).\(ext)"
+        let candidateURL = directory.appendingPathComponent(candidateName)
+        if !fileManager.fileExists(atPath: candidateURL.path) {
+            return candidateURL
+        }
+    }
+    let suffix = ext.isEmpty ? "" : ".\(ext)"
+    return directory.appendingPathComponent("\(stem) \(UUID().uuidString)\(suffix)")
 }
 
 private enum QuietSecrets {
@@ -76,8 +143,7 @@ private enum QuietSecrets {
     }
 
     private static func secretsURL() -> URL {
-        FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".blackhole", isDirectory: true)
+        quietApplicationSupportURL()
             .appendingPathComponent("secrets.json", isDirectory: false)
     }
 }
@@ -151,7 +217,7 @@ private let quietSecondaryButtonBorder = quietDynamicColor(
     dark: NSColor.white.withAlphaComponent(0.16)
 )
 private let quietComposerFill = quietDynamicColor(
-    light: NSColor(calibratedWhite: 0.91, alpha: 1),
+    light: NSColor(calibratedWhite: 0.96, alpha: 1),
     dark: NSColor(calibratedWhite: 0.09, alpha: 1)
 )
 private let quietHoverFill = quietDynamicColor(
@@ -170,19 +236,19 @@ private let quietMarkdownCodeFill = quietDynamicColor(
     light: NSColor.black.withAlphaComponent(0.08),
     dark: NSColor.black.withAlphaComponent(0.34)
 )
-private let blackholeWindowFill = quietDynamicNSColor(
+private let quietWindowFill = quietDynamicNSColor(
     light: NSColor.white,
     dark: NSColor(calibratedWhite: 0.04, alpha: 1)
 )
-private let blackholePanelFill = quietDynamicNSColor(
+private let quietPanelFill = quietDynamicNSColor(
     light: NSColor.white,
     dark: NSColor(calibratedWhite: 0.075, alpha: 1)
 )
-private let blackholeSidebarFill = quietDynamicNSColor(
+private let quietSidebarFill = quietDynamicNSColor(
     light: NSColor(calibratedWhite: 0.88, alpha: 1),
     dark: NSColor(calibratedWhite: 0.10, alpha: 1)
 )
-private let blackholeBorder = quietDynamicNSColor(
+private let quietBorder = quietDynamicNSColor(
     light: NSColor.black.withAlphaComponent(0.12),
     dark: NSColor.white.withAlphaComponent(0.11)
 )
@@ -326,8 +392,8 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             capturedPrefix: "Captured",
             noReadableFiles: "No readable resources found. Drop files, links, or text snippets.",
             noReadableResources: "No readable resources found. Drop files, links, or text snippets.",
-            autoOrganizeFiles: "Organize these resources",
-            autoOrganizeResources: "Organize these resources",
+            autoOrganizeFiles: "Handle this content",
+            autoOrganizeResources: "Handle this content",
             settingsTitle: "Settings",
             settingsSubtitle: "Model and app",
             language: "Language",
@@ -342,13 +408,13 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             appearanceDark: "Dark",
             quietRules: "Resource organizing rules",
             editQuietRules: "Edit rules",
-            quietRulesHelp: "Open ~/.blackhole/memory.md. Restart the agent after saving.",
+            quietRulesHelp: "Open ~/.quiet/memory.md. Restart the agent after saving.",
             saveAndRestart: "Save and restart agent",
             newSession: "New session",
             moreActions: "More actions",
             openDesktopClient: "Open desktop app",
             openFiles: "Open files",
-            quit: "Quit Blackhole",
+            quit: "Quit Quiet",
             composerPlaceholder: "Drop files, links, snippets, or type a message...",
             dropOverlay: "Release to capture resources",
             statusTooltip: "\(quietAppName) - drop files, links, or snippets",
@@ -370,8 +436,8 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             capturedPrefix: "已捕获",
             noReadableFiles: "没有读到可处理的资源。请拖入文件、链接，或粘贴文本片段。",
             noReadableResources: "没有读到可处理的资源。请拖入文件、链接，或粘贴文本片段。",
-            autoOrganizeFiles: "帮我整理这些资源",
-            autoOrganizeResources: "帮我整理这些资源",
+            autoOrganizeFiles: "帮我处理这些内容",
+            autoOrganizeResources: "帮我处理这些内容",
             settingsTitle: "设置",
             settingsSubtitle: "模型与应用",
             language: "语言",
@@ -386,13 +452,13 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             appearanceDark: "深色",
             quietRules: "资源整理规则",
             editQuietRules: "编辑规则",
-            quietRulesHelp: "打开 ~/.blackhole/memory.md，保存后重启 agent 生效",
+            quietRulesHelp: "打开 ~/.quiet/memory.md，保存后重启 agent 生效",
             saveAndRestart: "保存并重启 agent",
             newSession: "新建会话",
             moreActions: "更多操作",
             openDesktopClient: "打开桌面客户端",
             openFiles: "打开文件夹",
-            quit: "退出 Blackhole",
+            quit: "退出 Quiet",
             composerPlaceholder: "粘贴链接、片段，或输入消息...",
             dropOverlay: "松手捕获资源",
             statusTooltip: "\(quietAppName) - 拖入文件、链接或片段",
@@ -449,21 +515,32 @@ private func fileURL(fromDropItem item: NSSecureCoding?) -> URL? {
     return nil
 }
 
-private struct CapturedResource: Equatable {
+struct CapturedResource: Equatable {
     let kind: String
     let value: String
+    var name: String?
+    var mimeType: String?
 
     var payload: [String: String] {
-        [
+        var payload = [
             "kind": kind,
             "value": value,
         ]
+        if let name {
+            payload["name"] = name
+        }
+        if let mimeType {
+            payload["mimeType"] = mimeType
+        }
+        return payload
     }
 
     var displayName: String {
         switch kind {
         case "link":
             URL(string: value)?.host(percentEncoded: false) ?? value
+        case "image":
+            name ?? "Pasted image"
         default:
             truncateResourceLabel(value)
         }
@@ -479,7 +556,13 @@ private func capturedResource(from text: String) -> CapturedResource? {
     return CapturedResource(kind: "text", value: trimmed)
 }
 
-private func capturedResource(fromDropItem item: NSSecureCoding?) -> CapturedResource? {
+private func capturedResource(fromDropItem item: NSSecureCoding?, typeIdentifier: String? = nil) -> CapturedResource? {
+    if let typeIdentifier,
+       let type = UTType(typeIdentifier),
+       type.conforms(to: .image),
+       let resource = capturedImageResource(fromDropItem: item) {
+        return resource
+    }
     if let url = item as? URL, !url.isFileURL {
         return CapturedResource(kind: "link", value: url.absoluteString)
     }
@@ -497,6 +580,89 @@ private func capturedResource(fromDropItem item: NSSecureCoding?) -> CapturedRes
         return capturedResource(from: text)
     }
     return nil
+}
+
+private func capturedResources(from pasteboard: NSPasteboard) -> (paths: [String], resources: [CapturedResource]) {
+    var paths: [String] = []
+    var resources: [CapturedResource] = []
+
+    if let urls = pasteboard.readObjects(
+        forClasses: [NSURL.self],
+        options: [.urlReadingFileURLsOnly: false]
+    ) as? [URL] {
+        for url in urls {
+            if url.isFileURL {
+                paths.append(url.path)
+            } else {
+                resources.append(CapturedResource(kind: "link", value: url.absoluteString))
+            }
+        }
+    }
+
+    if let text = pasteboard.string(forType: .string),
+       let resource = capturedResource(from: text),
+       !resources.contains(resource),
+       !paths.contains(where: { $0 == resource.value }) {
+        resources.append(resource)
+    }
+
+    if paths.isEmpty,
+       let image = NSImage(pasteboard: pasteboard),
+       let data = pngData(from: image) {
+        resources.append(CapturedResource(
+            kind: "image",
+            value: data.base64EncodedString(),
+            name: "Pasted image \(quietTimestampForFilename()).png",
+            mimeType: "image/png"
+        ))
+    }
+
+    return (paths.sorted(), resources)
+}
+
+private func capturedImageResource(fromDropItem item: NSSecureCoding?) -> CapturedResource? {
+    let data: Data?
+    if let image = item as? NSImage {
+        data = pngData(from: image)
+    } else if let rawData = item as? Data {
+        data = normalizedImageData(from: rawData)
+    } else {
+        data = nil
+    }
+    guard let data else { return nil }
+    return CapturedResource(
+        kind: "image",
+        value: data.base64EncodedString(),
+        name: "Pasted image \(quietTimestampForFilename()).png",
+        mimeType: "image/png"
+    )
+}
+
+private func normalizedImageData(from data: Data) -> Data? {
+    if let image = NSImage(data: data) {
+        return pngData(from: image)
+    }
+    return nil
+}
+
+private func pngData(from image: NSImage) -> Data? {
+    var proposedRect = NSRect(origin: .zero, size: image.size)
+    if let cgImage = image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil) {
+        let bitmap = NSBitmapImageRep(cgImage: cgImage)
+        return bitmap.representation(using: .png, properties: [:])
+    }
+    guard let tiffData = image.tiffRepresentation,
+          let bitmap = NSBitmapImageRep(data: tiffData) else {
+        return nil
+    }
+    return bitmap.representation(using: .png, properties: [:])
+}
+
+private func quietTimestampForFilename() -> String {
+    let formatter = DateFormatter()
+    formatter.locale = Locale(identifier: "en_US_POSIX")
+    formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
+    return formatter.string(from: Date())
 }
 
 private func truncateResourceLabel(_ value: String, maxLength: Int = 42) -> String {
@@ -535,14 +701,14 @@ struct GlassIconBacking: NSViewRepresentable {
         view.layer?.cornerRadius = cornerRadius
         view.layer?.cornerCurve = .continuous
         view.layer?.masksToBounds = true
-        view.layer?.backgroundColor = quietResolvedCGColor(blackholePanelFill, colorScheme: context.environment.colorScheme)
+        view.layer?.backgroundColor = quietResolvedCGColor(quietPanelFill, colorScheme: context.environment.colorScheme)
         view.layer?.borderWidth = 0
         return view
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {
         nsView.layer?.cornerRadius = cornerRadius
-        nsView.layer?.backgroundColor = quietResolvedCGColor(blackholePanelFill, colorScheme: context.environment.colorScheme)
+        nsView.layer?.backgroundColor = quietResolvedCGColor(quietPanelFill, colorScheme: context.environment.colorScheme)
     }
 }
 
@@ -730,6 +896,25 @@ final class AgentStore: ObservableObject {
         lastDroppedPaths = []
     }
 
+    func sendCapturedPasteboardContent(from pasteboard: NSPasteboard = .general) -> Bool {
+        let captured = capturedResources(from: pasteboard)
+        guard !captured.paths.isEmpty || !captured.resources.isEmpty else { return false }
+        sendCapturedContent(paths: captured.paths, resources: captured.resources)
+        return true
+    }
+
+    func sendCapturedContent(paths: [String], resources: [CapturedResource]) {
+        guard !paths.isEmpty || !resources.isEmpty else { return }
+        lastDroppedPaths = []
+        inputText = ""
+        inputContainsPastedResource = false
+        send(
+            text: copy.autoOrganizeResources,
+            paths: paths,
+            resources: resources
+        )
+    }
+
     var hasUsableModelCredential: Bool {
         !modelProvider.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !modelId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -805,7 +990,7 @@ final class AgentStore: ObservableObject {
                 defer { group.leave() }
                 if let url = fileURL(fromDropItem: item) {
                     collector.append(url)
-                } else if let resource = capturedResource(fromDropItem: item) {
+                } else if let resource = capturedResource(fromDropItem: item, typeIdentifier: typeIdentifier) {
                     collector.append(resource)
                 }
             }
@@ -822,12 +1007,7 @@ final class AgentStore: ObservableObject {
                 ))
                 return
             }
-            self?.lastDroppedPaths = []
-            self?.send(
-                text: self?.copy.autoOrganizeResources ?? "Organize these resources",
-                paths: paths,
-                resources: resources
-            )
+            self?.sendCapturedContent(paths: paths, resources: resources)
         }
 
         return requestedResources
@@ -1369,9 +1549,7 @@ final class AgentStore: ObservableObject {
     }
 
     private func applicationSupportDirectory() -> URL {
-        let url = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".blackhole", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        return url
+        quietApplicationSupportURL()
     }
 
     private func johnnyDecimalAreaCategorySpecs() -> [(area: String, categories: [String])] {
@@ -1489,10 +1667,7 @@ final class AgentStore: ObservableObject {
     }
 
     private func contentDirectory() -> URL {
-        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
-        let url = documents.appendingPathComponent("Blackhole", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        let url = quietContentRootURL()
         johnnyDecimalDirectories().forEach { name in
             try? FileManager.default.createDirectory(at: url.appendingPathComponent(name, isDirectory: true), withIntermediateDirectories: true)
         }
@@ -1520,9 +1695,9 @@ final class AgentStore: ObservableObject {
         let url = applicationSupportDirectory().appendingPathComponent("memory.md", isDirectory: false)
         if !FileManager.default.fileExists(atPath: url.path) {
             let defaultMemory = """
-            # Blackhole Memory
+            # Quiet Memory
 
-            These are user-editable resource organizing rules for Blackhole.
+            These are user-editable resource organizing rules for Quiet.
 
             ## Learning User Preferences
 
@@ -1533,13 +1708,13 @@ final class AgentStore: ObservableObject {
 
             ## Default Method: Johnny.Decimal System
 
-            This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+            This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
 
             More information: https://johnnydecimal.com/
 
             These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
-            - Use Blackhole's Johnny.Decimal structure directly.
+            - Use Quiet's Johnny.Decimal structure directly.
             - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
             - The JDex lives in `00-09 System-management area/00 System-management category/00.00 JDex for the system`.
             - In-progress or unfiled resources stay in the most specific `.01 Inbox`.
@@ -1563,7 +1738,7 @@ final class AgentStore: ObservableObject {
             - Be concise.
             - Tell the user what was captured, moved, and where.
             - When a problem occurs, name the failed file and continue with the rest.
-            - Do not mention internal logs, manifests, or implementation files unless the user asks.
+            - Always respond in user's language.
             """
             try? defaultMemory.appending("\n").write(to: url, atomically: true, encoding: .utf8)
         } else if let memory = try? String(contentsOf: url, encoding: .utf8) {
@@ -1580,13 +1755,13 @@ final class AgentStore: ObservableObject {
 
             ## Default Method: Johnny.Decimal System
 
-            This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+            This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
 
             More information: https://johnnydecimal.com/
 
             These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
-            - Use Blackhole's Johnny.Decimal structure directly.
+            - Use Quiet's Johnny.Decimal structure directly.
             - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
             - The JDex lives in `00-09 System-management area/00 System-management category/00.00 JDex for the system`.
             - In-progress or unfiled resources stay in the most specific `.01 Inbox`.
@@ -1620,6 +1795,8 @@ final class AgentStore: ObservableObject {
                 || !migrated.contains("https://johnnydecimal.com/")
                 || migrated.contains("Inbox for Blackhole")
                 || migrated.contains("Index for Blackhole")
+                || migrated.contains("Inbox for Quiet")
+                || migrated.contains("Index for Quiet")
                 || migrated.contains("Someday material belongs")
                 || migrated.contains("00-09 System management/00 System management") {
                 if let conversationRange = migrated.range(of: "\n## Conversation Style") {
@@ -1644,6 +1821,19 @@ final class AgentStore: ObservableObject {
                 of: "`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`",
                 with: "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`"
             )
+            migrated = migrated
+                .replacingOccurrences(of: "Blackhole", with: "Quiet")
+                .replacingOccurrences(of: "blackhole", with: "quiet")
+                .replacingOccurrences(of: "~/.quiet", with: "~/.quiet")
+                .replacingOccurrences(of: "~/Documents/Quiet", with: "~/Documents/Quiet")
+            migrated = migrated.replacingOccurrences(
+                of: "\n- Do not mention internal logs, manifests, or implementation files unless the user asks.",
+                with: ""
+            )
+            if migrated.contains("## Conversation Style")
+                && !migrated.contains("Always respond in user's language.") {
+                migrated.append("\n- Always respond in user's language.")
+            }
             if migrated.appending("\n") != memory {
                 try? migrated.appending("\n").write(to: url, atomically: true, encoding: .utf8)
             }
@@ -1845,6 +2035,8 @@ struct QuietView: View {
     @State private var showFollowButton = false
     @State private var isRestoringFollow = false
     @State private var followRestoreToken = 0
+    @State private var latestScrollToken = 0
+    @State private var isFollowPausedByUser = false
     @State private var isSettingsPresented = false
     @State private var settingsApiKeyFocusRequest = 0
     @State private var showCredentialPrompt = false
@@ -1897,7 +2089,10 @@ struct QuietView: View {
                 .zIndex(10)
             }
         }
-        .background(Color(nsColor: blackholeWindowFill))
+        .background(Color(nsColor: quietWindowFill))
+        .background(PasteboardShortcutCatcher {
+            handleConversationPaste()
+        })
         .ignoresSafeArea(.container, edges: .top)
         .onDrop(of: quietDropTypeIdentifiers, isTargeted: $isDropTargeted, perform: store.handleDrop)
         .onReceive(NotificationCenter.default.publisher(for: .quietFocusComposer)) { _ in
@@ -1977,15 +2172,20 @@ struct QuietView: View {
                 ScrollViewReader { proxy in
                     ZStack(alignment: .trailing) {
                         ZStack(alignment: .bottom) {
-                            ScrollView(.vertical, showsIndicators: false) {
-                                LazyVStack(alignment: .leading, spacing: 10) {
-                                    ChatScrollMetricsReader { offset, viewportHeight, contentHeight in
+                            ScrollView(.vertical, showsIndicators: true) {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    ChatScrollMetricsReader(
+                                        onChange: { offset, viewportHeight, contentHeight in
                                         updateScrollMetrics(
                                             offset: offset,
                                             viewportHeight: viewportHeight,
                                             contentHeight: contentHeight
                                         )
-                                    }
+                                        },
+                                        onUserScroll: {
+                                            handleUserScrollInMessages()
+                                        }
+                                    )
                                     .frame(width: 0, height: 0)
                                     .allowsHitTesting(false)
 
@@ -2026,35 +2226,29 @@ struct QuietView: View {
                                 .padding(.horizontal, 14)
                                 .padding(.top, 2)
                                 .padding(.bottom, 4)
+                                .frame(width: viewport.size.width, alignment: .leading)
                             }
                             .coordinateSpace(name: "quietMessages")
                             .onChange(of: store.messages.last?.id) { _, id in
                                 if isFollowingLatest, id != nil {
-                                    withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                        proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
-                                    }
+                                    pinLatestAfterLayout(proxy: proxy)
                                 }
                             }
                             .onChange(of: store.messages.last?.text) { _, _ in
                                 guard isFollowingLatest else { return }
-                                withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                    proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
-                                }
+                                pinLatestAfterLayout(proxy: proxy)
                             }
                             .onChange(of: store.messages) { _, _ in
                                 guard isFollowingLatest else { return }
-                                withAnimation(.spring(response: 0.28, dampingFraction: 0.9)) {
-                                    proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
-                                }
+                                pinLatestAfterLayout(proxy: proxy)
                             }
                             .onChange(of: store.showTurnWaitIndicator) { _, isVisible in
                                 guard isFollowingLatest, isVisible else { return }
-                                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                    proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
-                                }
+                                pinLatestAfterLayout(proxy: proxy)
                             }
                             .onChange(of: store.sessionScrollRequest) { _, _ in
                                 beginScrollbarStabilization()
+                                isFollowPausedByUser = false
                                 isFollowingLatest = true
                                 showFollowButton = false
                                 var transaction = Transaction(animation: nil)
@@ -2111,20 +2305,6 @@ struct QuietView: View {
                             }
                         }
 
-                        SwiftUIChatScrollbar(
-                            offset: scrollOffset,
-                            viewportHeight: scrollViewportHeight,
-                            contentHeight: scrollbarContentHeight,
-                            onScrollToProgress: { progress in
-                                scrollToProgress(progress, proxy: proxy)
-                            }
-                        )
-                        .frame(width: 14)
-                        .frame(maxHeight: .infinity)
-                        .padding(.trailing, 4)
-                        .padding(.vertical, 8)
-                        .opacity(isScrollbarStabilizing ? 0 : 1)
-                        .zIndex(1)
                     }
                 }
             }
@@ -2144,17 +2324,10 @@ struct QuietView: View {
     }
 
     private func updateScrollMetrics(offset: CGFloat, viewportHeight: CGFloat, contentHeight: CGFloat) {
-        let previousOffset = scrollOffset
         scrollOffset = offset
         scrollViewportHeight = viewportHeight
 
         let height = max(1, contentHeight)
-        let isScrollable = height > viewportHeight + 8
-        let didScrollAwayFromLatest = !isRestoringFollow && isScrollable && offset < previousOffset - 3
-        if didScrollAwayFromLatest {
-            isFollowingLatest = false
-            showFollowButton = true
-        }
 
         if abs(scrollContentHeight - height) > 0.5 {
             let previousHeight = scrollContentHeight
@@ -2170,7 +2343,11 @@ struct QuietView: View {
             }
         }
 
-        if didScrollAwayFromLatest {
+        if updatePausedFollowState(offset: offset, contentHeight: height, viewportHeight: viewportHeight) {
+            if offset < 90,
+               height > viewportHeight + 8 {
+                store.loadMoreHistoryIfNeeded()
+            }
             return
         }
 
@@ -2198,10 +2375,27 @@ struct QuietView: View {
         }
     }
 
+    private func handleUserScrollInMessages() {
+        guard scrollContentHeight > scrollViewportHeight + 8 else {
+            return
+        }
+        stopFollowingForUserScroll()
+    }
+
+    private func stopFollowingForUserScroll() {
+        followRestoreToken += 1
+        latestScrollToken += 1
+        isRestoringFollow = false
+        isFollowPausedByUser = true
+        isFollowingLatest = false
+        showFollowButton = true
+    }
+
     private func restoreFollowToLatest(proxy: ScrollViewProxy) {
         followRestoreToken += 1
         let token = followRestoreToken
         isRestoringFollow = true
+        isFollowPausedByUser = false
         isFollowingLatest = true
         showFollowButton = false
 
@@ -2230,9 +2424,47 @@ struct QuietView: View {
         }
     }
 
+    private func pinLatestAfterLayout(proxy: ScrollViewProxy) {
+        latestScrollToken += 1
+        let token = latestScrollToken
+        isRestoringFollow = true
+        showFollowButton = false
+
+        scrollToLatestWithoutAnimation(proxy: proxy)
+
+        DispatchQueue.main.async {
+            guard token == latestScrollToken else { return }
+            scrollToLatestWithoutAnimation(proxy: proxy)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            guard token == latestScrollToken else { return }
+            scrollToLatestWithoutAnimation(proxy: proxy)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            guard token == latestScrollToken else { return }
+            isRestoringFollow = false
+            updateFollowState(
+                offset: scrollOffset,
+                contentHeight: scrollContentHeight,
+                viewportHeight: scrollViewportHeight
+            )
+        }
+    }
+
+    private func scrollToLatestWithoutAnimation(proxy: ScrollViewProxy) {
+        var transaction = Transaction(animation: nil)
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+        }
+    }
+
     private func updateFollowState(offset: CGFloat, contentHeight: CGFloat, viewportHeight: CGFloat) {
         let isScrollable = contentHeight > viewportHeight + 8
         guard isScrollable else {
+            isFollowPausedByUser = false
             isFollowingLatest = true
             showFollowButton = false
             return
@@ -2248,6 +2480,29 @@ struct QuietView: View {
             isFollowingLatest = false
             showFollowButton = true
         }
+    }
+
+    private func updatePausedFollowState(offset: CGFloat, contentHeight: CGFloat, viewportHeight: CGFloat) -> Bool {
+        guard isFollowPausedByUser else { return false }
+
+        let isScrollable = contentHeight > viewportHeight + 8
+        guard isScrollable else {
+            isFollowPausedByUser = false
+            isFollowingLatest = true
+            showFollowButton = false
+            return true
+        }
+
+        let distanceFromBottom = contentHeight - offset - viewportHeight
+        if distanceFromBottom <= 2 {
+            isFollowPausedByUser = false
+            isFollowingLatest = true
+            showFollowButton = false
+        } else {
+            isFollowingLatest = false
+            showFollowButton = true
+        }
+        return true
     }
 
     private func scrollToProgress(_ progress: CGFloat, proxy: ScrollViewProxy) {
@@ -2357,6 +2612,9 @@ struct QuietView: View {
                 onPaste: {
                     store.inputContainsPastedResource = true
                 },
+                onPasteCapturedContent: { paths, resources in
+                    handleCapturedPaste(paths: paths, resources: resources)
+                },
                 onSubmit: {
                     submitCurrentMessage()
                 }
@@ -2382,12 +2640,13 @@ struct QuietView: View {
         .background(quietComposerFill, in: Capsule())
         .overlay {
             Capsule()
-                .stroke(isInputFocused ? quietChatText.opacity(0.18) : quietHairline, lineWidth: 0.8)
+                .stroke(isInputFocused ? quietChatText.opacity(0.12) : quietHairline.opacity(0.62), lineWidth: 0.5)
         }
+        .shadow(color: .black.opacity(0.045), radius: 1.2, x: 0, y: 0.45)
         .padding(.horizontal, 6)
         .padding(.top, 8)
         .padding(.bottom, 6)
-        .background(Color(nsColor: blackholeWindowFill))
+        .background(Color(nsColor: quietWindowFill))
     }
 
     private func submitCurrentMessage() {
@@ -2398,6 +2657,26 @@ struct QuietView: View {
             return
         }
         store.sendCurrentMessage()
+    }
+
+    private func handleCapturedPaste(paths: [String], resources: [CapturedResource]) {
+        guard store.hasUsableModelCredential else {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showCredentialPrompt = true
+            }
+            return
+        }
+        store.sendCapturedContent(paths: paths, resources: resources)
+    }
+
+    private func handleConversationPaste() -> Bool {
+        guard store.hasUsableModelCredential else {
+            withAnimation(.easeInOut(duration: 0.18)) {
+                showCredentialPrompt = true
+            }
+            return true
+        }
+        return store.sendCapturedPasteboardContent()
     }
 }
 
@@ -2535,10 +2814,10 @@ struct CredentialPromptOverlay: View {
             }
             .padding(18)
             .frame(maxWidth: 360)
-            .background(Color(nsColor: blackholeWindowFill), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color(nsColor: quietWindowFill), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color(nsColor: blackholeBorder), lineWidth: 0.8)
+                    .stroke(Color(nsColor: quietBorder), lineWidth: 0.8)
             }
             .shadow(color: .black.opacity(0.35), radius: 22, x: 0, y: 12)
         }
@@ -2659,7 +2938,7 @@ struct SessionOverlayPanel: View {
             .frame(maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(Color(nsColor: blackholeSidebarFill), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(Color(nsColor: quietSidebarFill), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(quietNonUserBubbleBorder, lineWidth: 0.8)
@@ -2737,6 +3016,7 @@ struct ComposerTextView: NSViewRepresentable {
     @Binding var isFocused: Bool
     @Binding var measuredHeight: CGFloat
     let onPaste: () -> Void
+    let onPasteCapturedContent: ([String], [CapturedResource]) -> Void
     let onSubmit: () -> Void
 
     func makeNSView(context: Context) -> ComposerInputContainer {
@@ -2746,6 +3026,7 @@ struct ComposerTextView: NSViewRepresentable {
         }
         view.onSubmit = onSubmit
         view.onPaste = onPaste
+        view.onPasteCapturedContent = onPasteCapturedContent
         view.onFocusChange = { focused in
             isFocused = focused
         }
@@ -2761,6 +3042,7 @@ struct ComposerTextView: NSViewRepresentable {
         view.placeholder = placeholder
         view.onSubmit = onSubmit
         view.onPaste = onPaste
+        view.onPasteCapturedContent = onPasteCapturedContent
         view.onTextChange = { nextText in
             text = nextText
         }
@@ -2793,6 +3075,7 @@ final class ComposerInputContainer: NSView, NSTextViewDelegate {
     var onTextChange: ((String) -> Void)?
     var onSubmit: (() -> Void)?
     var onPaste: (() -> Void)?
+    var onPasteCapturedContent: (([String], [CapturedResource]) -> Void)?
     var onFocusChange: ((Bool) -> Void)?
     var onHeightChange: ((CGFloat) -> Void)?
     var placeholder: String = "" {
@@ -2910,6 +3193,14 @@ final class ComposerInputTextView: NSTextView {
     weak var container: ComposerInputContainer?
 
     override func paste(_ sender: Any?) {
+        let captured = capturedResources(from: .general)
+        let hasDirectPasteContent = !captured.paths.isEmpty
+            || captured.resources.contains(where: { $0.kind == "image" })
+        if hasDirectPasteContent {
+            container?.onPasteCapturedContent?(captured.paths, captured.resources)
+            refreshComposerChrome()
+            return
+        }
         super.paste(sender)
         container?.onPaste?()
         refreshComposerChrome()
@@ -2955,6 +3246,68 @@ final class ComposerInputTextView: NSTextView {
     }
 }
 
+struct PasteboardShortcutCatcher: NSViewRepresentable {
+    let onPaste: () -> Bool
+
+    func makeNSView(context: Context) -> PasteboardShortcutView {
+        let view = PasteboardShortcutView()
+        view.onPaste = onPaste
+        return view
+    }
+
+    func updateNSView(_ nsView: PasteboardShortcutView, context: Context) {
+        nsView.onPaste = onPaste
+        nsView.attachMonitorIfNeeded()
+    }
+}
+
+@MainActor
+final class PasteboardShortcutView: NSView {
+    var onPaste: (() -> Bool)?
+    private var monitor: EventMonitor?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        attachMonitorIfNeeded()
+    }
+
+    deinit {
+        monitor = nil
+    }
+
+    func attachMonitorIfNeeded() {
+        guard monitor == nil else { return }
+        if let token = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            guard let self else { return event }
+            return self.handle(event)
+        }) {
+            monitor = EventMonitor(token)
+        }
+    }
+
+    private func handle(_ event: NSEvent) -> NSEvent? {
+        guard let window,
+              event.window === window,
+              event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .command,
+              event.charactersIgnoringModifiers?.lowercased() == "v",
+              !isTextInputFocused(in: window) else {
+            return event
+        }
+        return onPaste?() == true ? nil : event
+    }
+
+    private func isTextInputFocused(in window: NSWindow) -> Bool {
+        var responder = window.firstResponder
+        while let current = responder {
+            if current is NSTextView || current is NSTextField {
+                return true
+            }
+            responder = current.nextResponder
+        }
+        return false
+    }
+}
+
 final class WindowMoveHotZoneNSView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -2994,10 +3347,8 @@ struct HeaderDragRegion: NSViewRepresentable {
 @MainActor
 private func addWindowMoveHotZones(to contentView: NSView) {
     let topZone = WindowMoveHotZoneNSView()
-    let rightZone = WindowMoveHotZoneNSView()
     let bottomZone = WindowMoveHotZoneNSView()
-    let leftZone = WindowMoveHotZoneNSView()
-    let zones = [topZone, rightZone, bottomZone, leftZone]
+    let zones = [topZone, bottomZone]
 
     zones.forEach { zone in
         zone.translatesAutoresizingMaskIntoConstraints = false
@@ -3012,20 +3363,10 @@ private func addWindowMoveHotZones(to contentView: NSView) {
         topZone.topAnchor.constraint(equalTo: contentView.topAnchor),
         topZone.heightAnchor.constraint(equalToConstant: 10),
 
-        rightZone.topAnchor.constraint(equalTo: contentView.topAnchor),
-        rightZone.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        rightZone.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-        rightZone.widthAnchor.constraint(equalToConstant: 10),
-
         bottomZone.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
         bottomZone.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
         bottomZone.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
         bottomZone.heightAnchor.constraint(equalToConstant: 10),
-
-        leftZone.topAnchor.constraint(equalTo: contentView.topAnchor),
-        leftZone.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-        leftZone.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-        leftZone.widthAnchor.constraint(equalToConstant: 10),
     ])
 }
 
@@ -3366,15 +3707,18 @@ struct SettingsPickerField: View {
 
 private struct ChatScrollMetricsReader: NSViewRepresentable {
     let onChange: (CGFloat, CGFloat, CGFloat) -> Void
+    let onUserScroll: () -> Void
 
     func makeNSView(context: Context) -> ChatScrollMetricsView {
         let view = ChatScrollMetricsView()
         view.onChange = onChange
+        view.onUserScroll = onUserScroll
         return view
     }
 
     func updateNSView(_ nsView: ChatScrollMetricsView, context: Context) {
         nsView.onChange = onChange
+        nsView.onUserScroll = onUserScroll
         DispatchQueue.main.async {
             nsView.attachToScrollViewIfNeeded()
             nsView.reportMetrics()
@@ -3382,13 +3726,17 @@ private struct ChatScrollMetricsReader: NSViewRepresentable {
     }
 }
 
+@MainActor
 private final class ChatScrollMetricsView: NSView {
     var onChange: ((CGFloat, CGFloat, CGFloat) -> Void)?
+    var onUserScroll: (() -> Void)?
 
     private weak var scrollView: NSScrollView?
     private var boundsObserver: NotificationObserver?
     private var contentFrameObserver: NotificationObserver?
     private var clipFrameObserver: NotificationObserver?
+    private var liveScrollObserver: NotificationObserver?
+    private var scrollWheelMonitor: EventMonitor?
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -3399,7 +3747,7 @@ private final class ChatScrollMetricsView: NSView {
     }
 
     deinit {
-        [boundsObserver, contentFrameObserver, clipFrameObserver].forEach { observer in
+        [boundsObserver, contentFrameObserver, clipFrameObserver, liveScrollObserver].forEach { observer in
             if let observer {
                 NotificationCenter.default.removeObserver(observer.token)
             }
@@ -3414,6 +3762,10 @@ private final class ChatScrollMetricsView: NSView {
         scrollView.contentView.postsBoundsChangedNotifications = true
         scrollView.contentView.postsFrameChangedNotifications = true
         scrollView.documentView?.postsFrameChangedNotifications = true
+        scrollView.scrollerStyle = .overlay
+        scrollView.autohidesScrollers = true
+        scrollView.verticalScroller?.controlSize = .mini
+        scrollView.verticalScroller?.knobStyle = .default
 
         boundsObserver = NotificationObserver(NotificationCenter.default.addObserver(
             forName: NSView.boundsDidChangeNotification,
@@ -3446,6 +3798,24 @@ private final class ChatScrollMetricsView: NSView {
                 }
             })
         }
+
+        liveScrollObserver = NotificationObserver(NotificationCenter.default.addObserver(
+            forName: NSScrollView.willStartLiveScrollNotification,
+            object: scrollView,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.onUserScroll?()
+                self?.scheduleMetricsReports()
+            }
+        })
+
+        if let monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel, handler: { [weak self] event in
+            self?.handleScrollWheel(event)
+            return event
+        }) {
+            scrollWheelMonitor = EventMonitor(monitor)
+        }
     }
 
     func reportMetrics() {
@@ -3454,6 +3824,30 @@ private final class ChatScrollMetricsView: NSView {
         let viewportHeight = max(1, scrollView.contentView.bounds.height)
         let contentHeight = max(1, scrollView.documentView?.frame.height ?? scrollView.contentSize.height)
         onChange?(offset, viewportHeight, contentHeight)
+    }
+
+    private func handleScrollWheel(_ event: NSEvent) {
+        guard let scrollView,
+              event.window === scrollView.window else {
+            return
+        }
+        let location = scrollView.convert(event.locationInWindow, from: nil)
+        guard scrollView.bounds.contains(location),
+              abs(event.scrollingDeltaY) > 0.1 || abs(event.scrollingDeltaX) > 0.1 else {
+            return
+        }
+        onUserScroll?()
+        scheduleMetricsReports()
+    }
+
+    private func scheduleMetricsReports() {
+        reportMetrics()
+        DispatchQueue.main.async { [weak self] in
+            self?.reportMetrics()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            self?.reportMetrics()
+        }
     }
 
     private func nearestScrollView() -> NSScrollView? {
@@ -3473,6 +3867,18 @@ private final class NotificationObserver: @unchecked Sendable {
 
     init(_ token: NSObjectProtocol) {
         self.token = token
+    }
+}
+
+private final class EventMonitor: @unchecked Sendable {
+    private let token: Any
+
+    init(_ token: Any) {
+        self.token = token
+    }
+
+    deinit {
+        NSEvent.removeMonitor(token)
     }
 }
 
@@ -4049,35 +4455,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setupMainMenu()
         setupStatusItem()
 
-        let rootView: NSView
+        let rootView = NSView()
+        rootView.wantsLayer = true
+        rootView.layer?.backgroundColor = NSColor.clear.cgColor
+
         let contentView = NSView()
         contentView.translatesAutoresizingMaskIntoConstraints = false
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
 
         let blackChromeView = NSView()
+        blackChromeView.translatesAutoresizingMaskIntoConstraints = false
         blackChromeView.wantsLayer = true
         blackChromeView.layer?.cornerRadius = 24
         blackChromeView.layer?.cornerCurve = .continuous
         blackChromeView.layer?.masksToBounds = true
-        blackChromeView.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: nil)
+        blackChromeView.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: nil)
         blackChromeView.layer?.borderWidth = 0.8
-        blackChromeView.layer?.borderColor = quietResolvedCGColor(blackholeBorder, appearance: nil)
+        blackChromeView.layer?.borderColor = quietResolvedCGColor(quietBorder, appearance: nil)
+        rootView.addSubview(blackChromeView)
         blackChromeView.addSubview(contentView)
-        rootView = blackChromeView
-        chromeRootView = rootView
+        chromeRootView = blackChromeView
 
         let hostingView = NSHostingView(rootView: QuietView())
         hostingView.translatesAutoresizingMaskIntoConstraints = false
-        hostingView.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: nil)
+        hostingView.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: nil)
         contentView.addSubview(hostingView)
         self.hostingView = hostingView
 
         NSLayoutConstraint.activate([
-            contentView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: rootView.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
+            blackChromeView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+            blackChromeView.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
+            blackChromeView.topAnchor.constraint(equalTo: rootView.topAnchor),
+            blackChromeView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
+            contentView.leadingAnchor.constraint(equalTo: blackChromeView.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: blackChromeView.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: blackChromeView.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: blackChromeView.bottomAnchor),
             hostingView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             hostingView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             hostingView.topAnchor.constraint(equalTo: contentView.topAnchor),
@@ -4096,7 +4510,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 key: Self.menuBarWindowFrameKey,
                 minimumSize: quietWindowMinimumSize
             ) ?? defaultFrame,
-            styleMask: [.borderless, .fullSizeContentView, .resizable],
+            styleMask: [.titled, .fullSizeContentView, .resizable],
             backing: .buffered,
             defer: false
         )
@@ -4112,6 +4526,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentMinSize = quietWindowMinimumSize
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        setStandardWindowButtonsHidden(true, for: window)
         window.orderOut(nil)
 
         let frameKeeper = WindowFrameKeeper()
@@ -4216,12 +4631,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateChromeBorder() {
         guard let chromeRootView else { return }
         let appearance = chromeRootView.effectiveAppearance
-        chromeRootView.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: appearance)
-        chromeRootView.layer?.borderColor = quietResolvedCGColor(blackholeBorder, appearance: appearance)
+        chromeRootView.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: appearance)
+        chromeRootView.layer?.borderColor = quietResolvedCGColor(quietBorder, appearance: appearance)
         chromeRootView.subviews.forEach { subview in
-            subview.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: appearance)
+            subview.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: appearance)
         }
-        hostingView?.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: appearance)
+        hostingView?.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: appearance)
+    }
+
+    private func setStandardWindowButtonsHidden(_ isHidden: Bool, for window: NSWindow? = nil) {
+        let targetWindow = window ?? self.window
+        [
+            NSWindow.ButtonType.closeButton,
+            .miniaturizeButton,
+            .zoomButton,
+        ].forEach { buttonType in
+            targetWindow?.standardWindowButton(buttonType)?.isHidden = isHidden
+        }
     }
 
     private func applyApplicationIcon() {
@@ -4302,12 +4728,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowMode = .menuBar
         frameKeeper?.frameStorageKey = Self.menuBarWindowFrameKey
         NSApp.setActivationPolicy(.accessory)
-        window.styleMask = [.borderless, .fullSizeContentView, .resizable]
+        window.styleMask = [.titled, .fullSizeContentView, .resizable]
         window.level = .popUpMenu
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.isMovableByWindowBackground = false
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        setStandardWindowButtonsHidden(true, for: window)
         window.minSize = quietWindowMinimumSize
         window.contentMinSize = quietWindowMinimumSize
         window.isOpaque = false
@@ -4339,6 +4766,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = quietAppName
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
+        setStandardWindowButtonsHidden(false, for: window)
         window.minSize = quietDesktopWindowMinimumSize
         window.contentMinSize = quietDesktopWindowMinimumSize
         window.isOpaque = false
@@ -4475,6 +4903,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         return frame
     }
+
 }
 
 @MainActor

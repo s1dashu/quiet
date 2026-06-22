@@ -12,6 +12,6 @@ Security fixes target the latest version on `main` until public releases are for
 
 ## Local Data and API Keys
 
-Blackhole stores runtime data under `~/.blackhole` and user-visible files under `~/Documents/Blackhole`. API keys are configured locally in the app settings, stored in the macOS Keychain, and should never be committed to the repository.
+Quiet stores runtime data under `~/.quiet` and user-visible files under `~/Documents/Quiet`. API keys are configured locally in the app settings, stored in the macOS Keychain, and should never be committed to the repository.
 
 When using a remote model provider, model requests are sent to the configured provider. Quiet does not operate a hosted backend for file storage or telemetry.

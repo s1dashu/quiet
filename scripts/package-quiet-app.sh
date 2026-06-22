@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DIST_DIR="$ROOT_DIR/dist"
-APP_DIR="$DIST_DIR/Blackhole.app"
+APP_DIR="$DIST_DIR/Quiet.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
 RESOURCES_DIR="$CONTENTS_DIR/Resources"
@@ -19,12 +19,12 @@ swift build --configuration "$CONFIGURATION"
 rm -rf "$APP_DIR"
 mkdir -p "$MACOS_DIR" "$RESOURCES_DIR"
 
-cp "$BUILD_DIR/quiet" "$MACOS_DIR/Blackhole"
-chmod +x "$MACOS_DIR/Blackhole"
+cp "$BUILD_DIR/quiet" "$MACOS_DIR/Quiet"
+chmod +x "$MACOS_DIR/Quiet"
 
 if [[ -d "$ICON_COMPOSER_DIR" || -f "$ICON_SOURCE" ]]; then
-  ICON_SOURCE_1024="$DIST_DIR/BlackholeIconSource-1024.png"
-  ICONSET_DIR="$DIST_DIR/Blackhole.iconset"
+  ICON_SOURCE_1024="$DIST_DIR/QuietIconSource-1024.png"
+  ICONSET_DIR="$DIST_DIR/Quiet.iconset"
   rm -rf "$ICONSET_DIR"
   mkdir -p "$ICONSET_DIR"
   if [[ -d "$ICON_COMPOSER_DIR" && -x "$ICTOOL" ]]; then
@@ -52,7 +52,7 @@ if [[ -d "$ICON_COMPOSER_DIR" || -f "$ICON_SOURCE" ]]; then
   sips -z 512 512 "$ICON_SOURCE_1024" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null
   sips -z 512 512 "$ICON_SOURCE_1024" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
   cp "$ICON_SOURCE_1024" "$ICONSET_DIR/icon_512x512@2x.png"
-  iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/Blackhole.icns"
+  iconutil -c icns "$ICONSET_DIR" -o "$RESOURCES_DIR/Quiet.icns"
   rm -rf "$ICONSET_DIR" "$ICON_SOURCE_1024"
 fi
 
@@ -82,15 +82,15 @@ cat > "$CONTENTS_DIR/Info.plist" <<'PLIST'
 <plist version="1.0">
 <dict>
   <key>CFBundleDisplayName</key>
-  <string>Blackhole</string>
+  <string>Quiet</string>
   <key>CFBundleExecutable</key>
-  <string>Blackhole</string>
+  <string>Quiet</string>
   <key>CFBundleIdentifier</key>
-  <string>com.sida.blackhole</string>
+  <string>com.sida.quiet</string>
   <key>CFBundleIconFile</key>
-  <string>Blackhole</string>
+  <string>Quiet</string>
   <key>CFBundleName</key>
-  <string>Blackhole</string>
+  <string>Quiet</string>
   <key>CFBundlePackageType</key>
   <string>APPL</string>
   <key>CFBundleShortVersionString</key>

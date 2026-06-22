@@ -6,6 +6,7 @@ import {
   cpSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -20,8 +21,37 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = resolve(__dirname, "../../../..");
 const require = createRequire(import.meta.url);
 
-const quietHome = resolve(process.env.QUIET_HOME?.trim() || join(homedir(), ".blackhole"));
-const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || join(homedir(), "Documents", "Blackhole"));
+function migrateDefaultDirectory(legacyDir, currentDir) {
+  if (legacyDir === currentDir || !existsSync(legacyDir)) return currentDir;
+  if (!existsSync(currentDir)) {
+    try {
+      renameSync(legacyDir, currentDir);
+      return currentDir;
+    } catch {
+      mkdirSync(currentDir, { recursive: true });
+    }
+  } else {
+    mkdirSync(currentDir, { recursive: true });
+  }
+
+  for (const entry of readdirSync(legacyDir, { withFileTypes: true })) {
+    const source = join(legacyDir, entry.name);
+    const destination = uniqueDestination(currentDir, safeName(entry.name));
+    try {
+      renameSync(source, destination);
+    } catch {
+      cpSync(source, destination, { recursive: true, preserveTimestamps: true, force: false, errorOnExist: true });
+      rmSync(source, { recursive: true, force: true });
+    }
+  }
+  rmSync(legacyDir, { recursive: true, force: true });
+  return currentDir;
+}
+
+const defaultQuietHome = migrateDefaultDirectory(join(homedir(), ".blackhole"), join(homedir(), ".quiet"));
+const defaultQuietContentHome = migrateDefaultDirectory(join(homedir(), "Documents", "Blackhole"), join(homedir(), "Documents", "Quiet"));
+const quietHome = resolve(process.env.QUIET_HOME?.trim() || defaultQuietHome);
+const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || defaultQuietContentHome);
 const systemAreaDir = join(quietContentHome, "00-09 System-management area");
 const systemManagementDir = join(systemAreaDir, "00 System-management category");
 const indexDir = join(systemManagementDir, "00.00 JDex for the system");
@@ -36,7 +66,7 @@ const agentDir = join(quietHome, "pi-agent");
 const workspaceDir = join(quietHome, "workspace");
 const memoryPath = join(quietHome, "memory.md");
 const sessionsDir = join(agentDir, "sessions");
-const promptPath = new URL("./quiet-prompt.md", import.meta.url);
+const promptPath = new URL("./agent-prompt.md", import.meta.url);
 const language = process.env.QUIET_LANGUAGE?.trim() === "zh" ? "zh" : "en";
 const initialSessionMessageLimit = 20;
 const sessionHistoryBatchSize = 10;
@@ -135,19 +165,19 @@ const areaCategorySpecs = [
 const copy = language === "zh"
   ? {
       startupFailed: "agent 启动失败，请检查模型 API Key 或 node_modules",
-      organizeFallback: "请整理这些资源。",
-      organizeInstruction: "你现在是 Blackhole 的 pi-coding-agent。请真实使用可用的 pi 工具理解并整理文件、链接、Snippet 和其他资源。",
+      organizeFallback: "请处理这些内容。",
+      organizeInstruction: "你现在是 Quiet 的 pi-coding-agent。请真实使用可用的 pi 工具理解并整理文件、链接、Snippet 和其他资源。",
       organizeDoneRule: "整理完成后，用中文简短总结你做了什么；不要提内部运行日志、manifest 或实现文件。",
-      explainFallback: "请说明你会如何处理丢进 Blackhole 的文件、链接和文本片段。",
+      explainFallback: "请说明你会如何处理丢进 Quiet 的文件、链接和文本片段。",
       noStagedResources: "没有资源进入 00.01 Inbox",
       taskTitle: "agent 资源整理任务",
     }
   : {
       startupFailed: "Agent failed to start. Check the model API key or node_modules.",
-      organizeFallback: "Please organize these resources.",
-      organizeInstruction: "You are Blackhole's pi-coding-agent. Use the available pi tools to understand and organize files, links, snippets, and other resources.",
+      organizeFallback: "Please handle this content.",
+      organizeInstruction: "You are Quiet's pi-coding-agent. Use the available pi tools to understand and organize files, links, snippets, and other resources.",
       organizeDoneRule: "When finished, briefly summarize what you moved and where in English; do not mention internal runtime logs, manifests, or implementation files.",
-      explainFallback: "Explain how you would handle files, links, and snippets dropped into Blackhole.",
+      explainFallback: "Explain how you would handle files, links, and snippets dropped into Quiet.",
       noStagedResources: "No resources entered 00.01 Inbox",
       taskTitle: "Agent resource organization task",
     };
@@ -205,7 +235,7 @@ function ensureQuietDecimalStructure() {
   if (!existsSync(indexPath)) {
     writeFileSync(indexPath, `# 00.00 JDex for the system
 
-Blackhole uses a Johnny.Decimal system. The JDex is the master record for the system's IDs: create or update JDex entries before creating new IDs elsewhere.
+Quiet uses a Johnny.Decimal system. The JDex is the master record for the system's IDs: create or update JDex entries before creating new IDs elsewhere.
 
 ## 00-09 System-management area
 
@@ -231,6 +261,9 @@ Blackhole uses a Johnny.Decimal system. The JDex is the master record for the sy
 function migrateLegacyTopLevelDirectories() {
   const migrations = [
     ["00 Inbox 待整理", inboxDir],
+    ["Inbox", inboxDir],
+    ["Files", inboxDir],
+    ["Output", archiveDir],
     ["01 Needs Review 需确认", inboxDir],
     ["09 System Archive 系统归档", archiveDir],
     [".inbox", inboxDir],
@@ -240,6 +273,12 @@ function migrateLegacyTopLevelDirectories() {
     ["00-09 System management/00 System management/00.03 Templates for Blackhole", templatesDir],
     ["00-09 System management/00 System management/00.08 Someday for Blackhole", archiveDir],
     ["00-09 System management/00 System management/00.09 Archive for Blackhole", archiveDir],
+    ["00-09 System management/00 System management/00.00 Index for Quiet", indexDir],
+    ["00-09 System management/00 System management/00.01 Inbox for Quiet", inboxDir],
+    ["00-09 System management/00 System management/00.02 Task & project management for Quiet", taskProjectDir],
+    ["00-09 System management/00 System management/00.03 Templates for Quiet", templatesDir],
+    ["00-09 System management/00 System management/00.08 Someday for Quiet", archiveDir],
+    ["00-09 System management/00 System management/00.09 Archive for Quiet", archiveDir],
   ];
   for (const [legacyName, destinationDir] of migrations) {
     const legacyDir = join(quietContentHome, legacyName);
@@ -259,9 +298,9 @@ function migrateLegacyTopLevelDirectories() {
 ensureQuietDecimalStructure();
 
 const defaultMemory = `
-# Blackhole Memory
+# Quiet Memory
 
-These are user-editable resource organizing rules for Blackhole.
+These are user-editable resource organizing rules for Quiet.
 
 ## Learning User Preferences
 
@@ -272,13 +311,13 @@ These are user-editable resource organizing rules for Blackhole.
 
 ## Default Method: Johnny.Decimal System
 
-This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
 
 More information: https://johnnydecimal.com/
 
 These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
-- Use Blackhole's Johnny.Decimal structure directly.
+- Use Quiet's Johnny.Decimal structure directly.
 - New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
 - The JDex lives in \`00-09 System-management area/00 System-management category/00.00 JDex for the system\`.
 - In-progress or unfiled resources stay in the most specific \`.01 Inbox\`.
@@ -302,7 +341,7 @@ ${categoryMapText()}
 - Be concise.
 - Tell the user what was captured, moved, and where.
 - When a problem occurs, name the failed file and continue with the rest.
-- Do not mention internal logs, manifests, or implementation files unless the user asks.
+- Always respond in user's language.
 `.trim();
 
 const memoryPreferenceGuidance = `
@@ -317,13 +356,13 @@ const memoryPreferenceGuidance = `
 const johnnyDecimalMemoryGuidance = `
 ## Default Method: Johnny.Decimal System
 
-This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
 
 More information: https://johnnydecimal.com/
 
 These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
-- Use Blackhole's Johnny.Decimal structure directly.
+- Use Quiet's Johnny.Decimal structure directly.
 - New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
 - The JDex lives in \`00-09 System-management area/00 System-management category/00.00 JDex for the system\`.
 - In-progress or unfiled resources stay in the most specific \`.01 Inbox\`.
@@ -370,6 +409,8 @@ function migrateMemoryText(memory) {
       || !next.includes("https://johnnydecimal.com/")
       || next.includes("Inbox for Blackhole")
       || next.includes("Index for Blackhole")
+      || next.includes("Inbox for Quiet")
+      || next.includes("Index for Quiet")
       || next.includes("Someday material belongs")
       || next.includes("00-09 System management/00 System management")
     )
@@ -379,7 +420,13 @@ function migrateMemoryText(memory) {
 
   next = next
     .replace(/`QUIET_CONTENT_HOME\/<subject>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`")
-    .replace(/`QUIET_CONTENT_HOME\/<numbered-area>\/<numbered-category-or-topic>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`");
+    .replace(/`QUIET_CONTENT_HOME\/<numbered-area>\/<numbered-category-or-topic>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`")
+    .replace(/Blackhole/g, "Quiet")
+    .replace(/blackhole/g, "quiet");
+  next = next.replace(/\n- Do not mention internal logs, manifests, or implementation files unless the user asks\./g, "");
+  if (next.includes("## Conversation Style") && !next.includes("Always respond in user's language.")) {
+    next = `${next}\n- Always respond in user's language.`;
+  }
   return `${next.trim()}\n`;
 }
 
@@ -541,7 +588,7 @@ async function ingestToInbox(paths) {
         throw new Error("源文件不存在");
       }
       if (isInside(quietHome, source) || isInside(quietContentHome, source)) {
-        throw new Error("文件已经在 Blackhole 目录内");
+        throw new Error("文件已经在 Quiet 目录内");
       }
       const destination = uniqueDestination(batchDir, safeName(source.split(sep).at(-1)));
       await movePath(source, destination);
@@ -567,6 +614,20 @@ function resourceMarkdown(resource, capturedAt) {
   return `# Snippet\n\n- Captured: ${capturedAt}\n\n## Content\n\n\`\`\`text\n${value}\n\`\`\`\n`;
 }
 
+function imageExtension(resource) {
+  const name = safeName(String(resource?.name || ""));
+  const mimeType = String(resource?.mimeType || "").toLowerCase();
+  if (name.toLowerCase().endsWith(".jpg") || name.toLowerCase().endsWith(".jpeg")) return "jpg";
+  if (name.toLowerCase().endsWith(".gif")) return "gif";
+  if (name.toLowerCase().endsWith(".webp")) return "webp";
+  if (name.toLowerCase().endsWith(".tif") || name.toLowerCase().endsWith(".tiff")) return "tiff";
+  if (mimeType.includes("jpeg")) return "jpg";
+  if (mimeType.includes("gif")) return "gif";
+  if (mimeType.includes("webp")) return "webp";
+  if (mimeType.includes("tiff")) return "tiff";
+  return "png";
+}
+
 async function ingestResourcesToInbox(resources) {
   const batchId = new Date().toISOString().replace(/[:.]/g, "-");
   const batchDir = join(inboxDir, batchId);
@@ -576,20 +637,34 @@ async function ingestResourcesToInbox(resources) {
   const failed = [];
 
   for (const resource of resources) {
-    const kind = String(resource?.kind || "text").trim().toLowerCase() === "link" ? "link" : "text";
+    const rawKind = String(resource?.kind || "text").trim().toLowerCase();
+    const kind = rawKind === "link" || rawKind === "image" ? rawKind : "text";
     const value = String(resource?.value || "").trim();
     try {
       if (!value) {
         throw new Error("资源内容为空");
       }
-      const stem = safeResourceStem(value, kind === "link" ? "Link" : "Snippet");
-      const destination = uniqueDestination(batchDir, `${stem}.${kind === "link" ? "url" : "snippet"}.md`);
-      writeFileSync(destination, resourceMarkdown({ kind, value }, capturedAt), "utf8");
-      ingested.push({
-        originalSource: kind,
-        inboxPath: destination,
-        originalName: safeName(kind === "link" ? `Link: ${value}` : `Snippet: ${value.slice(0, 60)}`),
-      });
+      if (kind === "image") {
+        const imageName = safeName(String(resource?.name || ""));
+        const extension = imageExtension(resource);
+        const stem = safeResourceStem(imageName.replace(/\.[^.]+$/, ""), "Pasted image");
+        const destination = uniqueDestination(batchDir, `${stem}.${extension}`);
+        writeFileSync(destination, Buffer.from(value, "base64"));
+        ingested.push({
+          originalSource: kind,
+          inboxPath: destination,
+          originalName: imageName || `Pasted image.${extension}`,
+        });
+      } else {
+        const stem = safeResourceStem(value, kind === "link" ? "Link" : "Snippet");
+        const destination = uniqueDestination(batchDir, `${stem}.${kind === "link" ? "url" : "snippet"}.md`);
+        writeFileSync(destination, resourceMarkdown({ kind, value }, capturedAt), "utf8");
+        ingested.push({
+          originalSource: kind,
+          inboxPath: destination,
+          originalName: safeName(kind === "link" ? `Link: ${value}` : `Snippet: ${value.slice(0, 60)}`),
+        });
+      }
     } catch (error) {
       failed.push({ source: kind, reason: error?.message ?? String(error) });
     }
@@ -624,7 +699,7 @@ function writeSystemArchiveRecord({ batchId, startedAt, finishedAt, ingested, fa
   const moved = items.filter((item) => item.status === "moved_from_inbox").length;
   const waiting = items.length - moved;
   const mdPath = uniqueDestination(archiveDir, `${safeBatchId}.md`);
-  writeFileSync(mdPath, `# Blackhole Batch ${safeBatchId}
+  writeFileSync(mdPath, `# Quiet Batch ${safeBatchId}
 
 - Started: ${startedAt}
 - Finished: ${finishedAt}
@@ -664,7 +739,7 @@ function findPackageEntry(packageName) {
 async function loadPi() {
   const entry = findPackageEntry("@earendil-works/pi-coding-agent");
   if (!entry) {
-    throw new Error("找不到 @earendil-works/pi-coding-agent。请先运行 npm install，或重新打包 Blackhole.app。");
+    throw new Error("找不到 @earendil-works/pi-coding-agent。请先运行 npm install，或重新打包 Quiet.app。");
   }
   return import(pathToFileURL(entry).href);
 }
@@ -672,7 +747,7 @@ async function loadPi() {
 async function loadPiAi() {
   const entry = findPackageEntry("@earendil-works/pi-ai");
   if (!entry) {
-    throw new Error("找不到 @earendil-works/pi-ai。请先运行 npm install，或重新打包 Blackhole.app。");
+    throw new Error("找不到 @earendil-works/pi-ai。请先运行 npm install，或重新打包 Quiet.app。");
   }
   return import(pathToFileURL(entry).href);
 }
@@ -946,7 +1021,7 @@ async function loadSessionHistory(sessionPath) {
 async function deleteSession(sessionPath) {
   if (!sessionPath) return;
   if (!isInside(sessionsDir, sessionPath)) {
-    throw new Error("Refusing to delete a file outside the Blackhole sessions directory.");
+    throw new Error("Refusing to delete a file outside the Quiet sessions directory.");
   }
   const currentPath = currentSession?.sessionFile;
   const isCurrent = currentPath && resolve(currentPath) === resolve(sessionPath);
@@ -1140,28 +1215,28 @@ function buildOrganizePrompt(paths, userText) {
   const rules = language === "zh"
     ? `硬性规则：
 1. 只处理本次列出的 00.01 Inbox 资源：${inboxDir}
-2. 请按 ~/.blackhole/memory.md 的规则理解用户的偏好并整理。
+2. 请按 ~/.quiet/memory.md 的规则理解用户的偏好并整理。
 3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后 00.01 Inbox 源路径不应继续存在，除非它仍处于未归档状态。
-4. 整理后的文件只能放到 Blackhole 根目录：${filesDir}
+4. 整理后的文件只能放到 Quiet 根目录：${filesDir}
 5. 默认直接使用 Johnny.Decimal 编号结构；优先放进已有编号区域，不要回到旧的纯 subject 一级目录。
 6. 系统管理区是 ${systemManagementDir}，包含 00.00 JDex、00.01 Inbox、00.02 Task & project management、00.03 Templates、00.04 Links、00.09 Archive。
 7. 每个 area 下都有 10 个 category；每个 category 下都有官方 standard-zero ID：AC.00、AC.01、AC.02、AC.03、AC.04、AC.09。不要创建或使用 AC.05-AC.08。
 8. 优先放入最具体的 proper ID；如果无法确定 proper ID，但能确定 category，则放入该 category 的 AC.01 Inbox；如果只能确定 area，则放入 A0.01 Inbox；完全无法判断才放入 00.01 Inbox。
-9. Blackhole 生成的批次归档记录放在 ${archiveDir}；原始用户资源不要放进系统管理区，除非它们仍在 00.01 Inbox 等待处理。
+9. Quiet 生成的批次归档记录放在 ${archiveDir}；原始用户资源不要放进系统管理区，除非它们仍在 00.01 Inbox 等待处理。
 10. 目标路径使用 ${filesDir}/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>。
 11. 不要新建摘要、索引、报告或说明文档；如需说明，只在对用户的最终回复里简短总结。
 12. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
 13. ${copy.organizeDoneRule}`
     : `Hard rules:
 1. Only process the 00.01 Inbox resources listed in this task: ${inboxDir}
-2. Follow ~/.blackhole/memory.md to understand the user's preferences and organize accordingly.
+2. Follow ~/.quiet/memory.md to understand the user's preferences and organize accordingly.
 3. Move with mv; do not copy or delete user files or resources. After a successful move, the 00.01 Inbox source path should no longer exist unless it remains unfiled or needs confirmation.
-4. Organized files must stay directly under the Blackhole root: ${filesDir}
+4. Organized files must stay directly under the Quiet root: ${filesDir}
 5. Use the Johnny.Decimal numbered structure directly. Prefer existing numbered areas; do not fall back to old plain subject top-level folders.
 6. The system-management category is ${systemManagementDir}: 00.00 JDex, 00.01 Inbox, 00.02 Task & project management, 00.03 Templates, 00.04 Links, 00.09 Archive.
 7. Every area has 10 categories; every category has the official standard-zero IDs: AC.00, AC.01, AC.02, AC.03, AC.04, AC.09. Do not create or use AC.05-AC.08.
 8. Prefer the most specific proper ID. If you cannot identify a proper ID but can identify the category, use that category's AC.01 Inbox. If you can only identify the area, use A0.01 Inbox. Use 00.01 Inbox only when the area is unknown.
-9. Blackhole-created batch archive records go in ${archiveDir}. Do not put original user resources in system management unless they are still waiting in 00.01 Inbox.
+9. Quiet-created batch archive records go in ${archiveDir}. Do not put original user resources in system management unless they are still waiting in 00.01 Inbox.
 10. Use ${filesDir}/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name> as the destination pattern.
 11. Do not create summaries, indexes, reports, or notes as files. Summarize only in the final user-facing reply.
 12. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
@@ -1174,7 +1249,7 @@ ${copy.organizeInstruction}
 
 ${rules}
 
-Blackhole dirs:
+Quiet dirs:
 - content root: ${quietContentHome}
 - 00.00 JDex: ${indexDir}
 - 00.01 Inbox: ${inboxDir}
@@ -1225,7 +1300,7 @@ async function handleUserMessage(message) {
     emit({
       type: "plan",
       title: copy.taskTitle,
-      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/<area>/<category>/<AC.ID>`),
+      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Quiet/<area>/<category>/<AC.ID>`),
     });
     const session = await getPiSession();
     try {
@@ -1244,7 +1319,7 @@ async function handleUserMessage(message) {
   }
 
   const session = await getPiSession();
-  await session.prompt(text || `${copy.explainFallback} Blackhole root=${filesDir}.`, {
+  await session.prompt(text || `${copy.explainFallback} Quiet root=${filesDir}.`, {
     source: "interactive",
   });
 }
@@ -1252,8 +1327,8 @@ async function handleUserMessage(message) {
 emit({
   type: "ready",
   pid: process.pid,
-  protocol: "blackhole-pi-jsonl-v1",
-  app: "blackhole",
+  protocol: "quiet-pi-jsonl-v1",
+  app: "quiet",
   filesRoot: filesDir,
   index: indexDir,
   inbox: inboxDir,

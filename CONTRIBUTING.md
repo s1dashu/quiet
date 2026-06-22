@@ -39,8 +39,8 @@ npm audit --omit=dev --registry=https://registry.npmjs.org
 - Keep the app native. Do not add Electron or webview UI dependencies.
 - Treat `Sources/QuietMenuBar/main.swift` as the active app entry point.
 - Keep generated build output out of git: `.build/`, `dist/`, and `node_modules/`.
-- User files should remain under `~/Documents/Blackhole` unless a user explicitly chooses a different policy.
-- Runtime data belongs under `~/.blackhole`.
+- User files should remain under `~/Documents/Quiet` unless a user explicitly chooses a different policy.
+- Runtime data belongs under `~/.quiet`.
 
 ## Privacy Expectations
 

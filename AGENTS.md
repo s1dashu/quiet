@@ -11,7 +11,7 @@ The app is intentionally built with the native macOS stack, not Electron. It is 
 - `Package.swift` defines the Swift package and executable product `quiet`.
 - `Sources/QuietMenuBar/main.swift` contains the macOS app, status bar item, glass window, chat UI, settings page, drag/drop, auto-follow, and agent process bridge.
 - `Sources/QuietMenuBar/Resources/pi-agent/server.mjs` is the Node JSONL agent server.
-- `Sources/QuietMenuBar/Resources/pi-agent/quiet-prompt.md` is the Quiet system prompt used by pi.
+- `Sources/QuietMenuBar/Resources/pi-agent/agent-prompt.md` is the Quiet system prompt used by pi.
 - `scripts/package-quiet-app.sh` builds `dist/Quiet.app`, embeds Node, embeds the pi-agent resources, and copies `node_modules`.
 - `README.md` has user-facing project notes.
 
@@ -21,8 +21,8 @@ Treat the SwiftPM `QuietMenuBar` target as the active app. Build output under `.
 
 - App name: `Quiet`.
 - Runtime data root: `~/.quiet`.
-- User-visible content root: `~/Documents/Blackhole`.
-- Dragged files first go to visible inbox batches under `~/Documents/Blackhole/00-09 System-management area/00 System-management category/00.01 Inbox for the system/<batch-id>`.
+- User-visible content root: `~/Documents/Quiet`.
+- Dragged files first go to visible inbox batches under `~/Documents/Quiet/00-09 System-management area/00 System-management category/00.01 Inbox for the system/<batch-id>`.
 - The pi agent organizes files using the Johnny.Decimal structure directly:
   - `00-09 System-management area/00 System-management category/00.00 JDex for the system` for the system JDex.
   - `00-09 System-management area/00 System-management category/00.01 Inbox for the system` for new drops when the area is unknown.
@@ -30,9 +30,9 @@ Treat the SwiftPM `QuietMenuBar` target as the active app. Build output under `.
   - Each category has standard-zero ID folders: `AC.00 JDex`, `AC.01 Inbox`, `AC.02 Task & project management`, `AC.03 Templates`, `AC.04 Links`, and `AC.09 Archive`.
   - Do not create or use `AC.05-AC.08`; these are reserved by Johnny.Decimal.
 - Keep generated or explanatory content in chat unless the user explicitly asks for files.
-- Undo logs go to `~/.blackhole/undo`.
+- Undo logs go to `~/.quiet/undo`.
 
-Do not move user files outside `~/Documents/Blackhole` unless the user explicitly asks for a different policy.
+Do not move user files outside `~/Documents/Quiet` unless the user explicitly asks for a different policy.
 
 ## Agent Backend
 
