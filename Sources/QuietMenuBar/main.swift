@@ -7,8 +7,8 @@ import UniformTypeIdentifiers
 private let quietAppName = "Blackhole"
 private let quietWindowDefaultSize = NSSize(width: 380, height: 520)
 private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
-private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 580)
-private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 460)
+private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 540)
+private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
 private let quietHeaderHeight: CGFloat = 54
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
@@ -1607,12 +1607,6 @@ struct QuietView: View {
     @State private var isDropTargeted = false
     @State private var composerInputHeight: CGFloat = 19
     @State private var isSidebarPresented = false
-    @State private var isDesktopChromePresented = false
-
-    private var topChromeInset: CGFloat {
-        isDesktopChromePresented ? quietDesktopTitlebarInset : 0
-    }
-
     var body: some View {
         Group {
             if isSettingsPresented {
@@ -1652,9 +1646,6 @@ struct QuietView: View {
             guard !isSettingsPresented else { return }
             isInputFocused = true
         }
-        .onReceive(NotificationCenter.default.publisher(for: .quietWindowChromeModeDidChange)) { notification in
-            isDesktopChromePresented = (notification.object as? Bool) == true
-        }
         .onChange(of: store.inputText) { _, text in
             if text.isEmpty {
                 store.inputContainsPastedResource = false
@@ -1669,7 +1660,7 @@ struct QuietView: View {
             ZStack(alignment: .topLeading) {
                 VStack(spacing: 0) {
                     Color.clear
-                        .frame(height: quietHeaderHeight + topChromeInset)
+                        .frame(height: quietHeaderHeight)
 
                     messageList
 
@@ -1693,7 +1684,7 @@ struct QuietView: View {
                     SessionOverlayPanel(
                         sessions: store.sessions,
                         currentSessionPath: store.currentSessionPath,
-                        topContentInset: quietHeaderHeight + topChromeInset + 8,
+                        topContentInset: quietHeaderHeight + 8,
                         onSelect: { session in
                             store.openSession(session)
                             withAnimation(.easeInOut(duration: 0.18)) {
@@ -1712,7 +1703,6 @@ struct QuietView: View {
                 }
 
                 header
-                    .padding(.top, topChromeInset)
                     .zIndex(3)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -3930,7 +3920,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setContentSize(quietWindowDefaultSize)
         }
         updateChromeBorder()
-        notifyWindowChromeModeDidChange()
     }
 
     private func configureWindowForDesktopIfNeeded() {
@@ -3940,7 +3929,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowMode = .desktop
         frameKeeper?.frameStorageKey = Self.desktopWindowFrameKey
         NSApp.setActivationPolicy(.regular)
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.collectionBehavior = [.fullScreenPrimary]
         window.isMovableByWindowBackground = true
         window.title = quietAppName
@@ -3965,14 +3954,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setFrame(NSRect(origin: origin, size: size), display: false)
         }
         updateChromeBorder()
-        notifyWindowChromeModeDidChange()
-    }
-
-    private func notifyWindowChromeModeDidChange() {
-        NotificationCenter.default.post(
-            name: .quietWindowChromeModeDidChange,
-            object: windowMode == .desktop
-        )
     }
 
     private func showStatusItemMenu() {
