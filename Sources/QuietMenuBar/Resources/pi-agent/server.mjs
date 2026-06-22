@@ -270,7 +270,11 @@ These are user-editable resource organizing rules for Blackhole.
 - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
 
-## Johnny.Decimal System
+## Default Method: Johnny.Decimal System
+
+This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+
+These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
 - Use Blackhole's Johnny.Decimal structure directly.
 - New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
@@ -309,7 +313,11 @@ const memoryPreferenceGuidance = `
 `.trim();
 
 const johnnyDecimalMemoryGuidance = `
-## Johnny.Decimal System
+## Default Method: Johnny.Decimal System
+
+This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+
+These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
 - Use Blackhole's Johnny.Decimal structure directly.
 - New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
@@ -340,7 +348,7 @@ function migrateMemoryText(memory) {
   const legacyTaxonomyPattern = /\n## (?:Subject Taxonomy|Quiet Decimal Taxonomy)\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
   if (legacyTaxonomyPattern.test(next)) {
     next = next.replace(legacyTaxonomyPattern, `\n${johnnyDecimalMemoryGuidance}\n`);
-  } else if (!next.includes("## Johnny.Decimal System")) {
+  } else if (!next.includes("## Default Method: Johnny.Decimal System") && !next.includes("## Johnny.Decimal System")) {
     const conversationIndex = next.indexOf("\n## Conversation Style");
     if (conversationIndex >= 0) {
       next = `${next.slice(0, conversationIndex).trim()}\n\n${johnnyDecimalMemoryGuidance}\n${next.slice(conversationIndex)}`;
@@ -349,11 +357,12 @@ function migrateMemoryText(memory) {
     }
   }
 
-  const currentJohnnyPattern = /\n## Johnny\.Decimal System\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
+  const currentJohnnyPattern = /\n## (?:Default Method: Johnny\.Decimal System|Johnny\.Decimal System)\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
   if (
     currentJohnnyPattern.test(next)
     && (
       !next.includes("## Default Areas and Categories")
+      || next.includes("## Johnny.Decimal System")
       || next.includes("Inbox for Blackhole")
       || next.includes("Index for Blackhole")
       || next.includes("Someday material belongs")

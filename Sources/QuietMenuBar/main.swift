@@ -1531,7 +1531,11 @@ final class AgentStore: ObservableObject {
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
 
-            ## Johnny.Decimal System
+            ## Default Method: Johnny.Decimal System
+
+            This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+
+            These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
             - Use Blackhole's Johnny.Decimal structure directly.
             - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
@@ -1572,7 +1576,11 @@ final class AgentStore: ObservableObject {
             """
             let johnnyDecimalGuidance = """
 
-            ## Johnny.Decimal System
+            ## Default Method: Johnny.Decimal System
+
+            This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+
+            These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
             - Use Blackhole's Johnny.Decimal structure directly.
             - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
@@ -1602,15 +1610,16 @@ final class AgentStore: ObservableObject {
                 options: .regularExpression
             ) {
                 migrated.replaceSubrange(taxonomyRange, with: "\n" + johnnyDecimalGuidance + "\n")
-            } else if !migrated.contains("## Johnny.Decimal System")
+            } else if !migrated.contains("## Default Method: Johnny.Decimal System")
                 || !migrated.contains("## Default Areas and Categories")
+                || migrated.contains("## Johnny.Decimal System")
                 || migrated.contains("Inbox for Blackhole")
                 || migrated.contains("Index for Blackhole")
                 || migrated.contains("Someday material belongs")
                 || migrated.contains("00-09 System management/00 System management") {
                 if let conversationRange = migrated.range(of: "\n## Conversation Style") {
                     if let currentRange = migrated.range(
-                        of: #"(?s)\n## Johnny\.Decimal System\n.*?(?=\n## Conversation Style|\n## Learning User Preferences|$)"#,
+                        of: #"(?s)\n## (Default Method: Johnny\.Decimal System|Johnny\.Decimal System)\n.*?(?=\n## Conversation Style|\n## Learning User Preferences|$)"#,
                         options: .regularExpression
                     ) {
                         migrated.replaceSubrange(currentRange, with: "\n" + johnnyDecimalGuidance + "\n")

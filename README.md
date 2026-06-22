@@ -128,7 +128,7 @@ Blackhole reads `~/.blackhole/memory.md` for your resource-organizing preference
 ```markdown
 # Blackhole Memory
 
-## Johnny.Decimal System
+## Default Method: Johnny.Decimal System
 - New drops enter 00-09 System-management area/00 System-management category/00.01 Inbox for the system.
 - Prefer a proper AC.ID; otherwise use the most specific .01 Inbox.
 - Every area has 10 categories, and every category has .00 JDex, .01 Inbox, .02 Task & project management, .03 Templates, .04 Links, and .09 Archive.
