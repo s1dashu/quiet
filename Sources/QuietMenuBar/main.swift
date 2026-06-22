@@ -1464,9 +1464,8 @@ final class AgentStore: ObservableObject {
             - Do not mention internal logs, manifests, or implementation files unless the user asks.
             """
             try? defaultMemory.appending("\n").write(to: url, atomically: true, encoding: .utf8)
-        } else if let memory = try? String(contentsOf: url, encoding: .utf8),
-                  !memory.contains("## Learning User Preferences") {
-            let guidance = """
+        } else if let memory = try? String(contentsOf: url, encoding: .utf8) {
+            let preferenceGuidance = """
 
             ## Learning User Preferences
 
@@ -1475,11 +1474,58 @@ final class AgentStore: ObservableObject {
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
             """
-            try? memory.trimmingCharacters(in: .whitespacesAndNewlines)
-                .appending("\n")
-                .appending(guidance)
-                .appending("\n")
-                .write(to: url, atomically: true, encoding: .utf8)
+            let johnnyDecimalGuidance = """
+
+            ## Johnny.Decimal System
+
+            - Use Blackhole's Johnny.Decimal structure directly.
+            - New drops enter `00-09 System management/00 System management/00.01 Inbox for Blackhole`.
+            - The index lives in `00-09 System management/00 System management/00.00 Index for Blackhole`.
+            - In-progress or unfiled resources stay in `00.01 Inbox for Blackhole`.
+            - Tasks and project-management material belongs in `00.02 Task & project management for Blackhole`.
+            - Templates belong in `00.03 Templates for Blackhole`.
+            - Someday material belongs in `00.08 Someday for Blackhole`.
+            - Completed or inactive system-management material belongs in `00.09 Archive for Blackhole`.
+            - Prefer existing numbered areas over creating new top-level folders.
+            - User resources that are old/completed belong in `90-99 Archive 归档`; system-management archive material belongs in `00.09 Archive for Blackhole`.
+
+            ## Default Numbered Areas
+
+            - `10-19 Personal 个人`: identity, health, family, education, travel.
+            - `20-29 Money 财务`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
+            - `30-39 Work 工作`: meetings, projects, vendors, reports, operations.
+            - `40-49 Legal & Admin 法务行政`: legal documents, government forms, insurance, certificates.
+            - `50-59 Assets & Property 资产`: real estate, vehicles, devices, warranties.
+            - `90-99 Archive 归档`: old, completed, or inactive user resources.
+
+            ## Destination Pattern
+
+            `QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`
+            """
+            var migrated = memory.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !migrated.contains("## Learning User Preferences") {
+                migrated.append(preferenceGuidance)
+            }
+            if let taxonomyRange = migrated.range(
+                of: #"(?s)\n## (Subject Taxonomy|Quiet Decimal Taxonomy)\n.*?(?=\n## Conversation Style|\n## Learning User Preferences|$)"#,
+                options: .regularExpression
+            ) {
+                migrated.replaceSubrange(taxonomyRange, with: "\n" + johnnyDecimalGuidance + "\n")
+            } else if !migrated.contains("## Johnny.Decimal System") {
+                if let conversationRange = migrated.range(of: "\n## Conversation Style") {
+                    migrated.insert(contentsOf: "\n" + johnnyDecimalGuidance + "\n", at: conversationRange.lowerBound)
+                } else {
+                    migrated.append("\n")
+                    migrated.append(johnnyDecimalGuidance)
+                }
+            }
+            migrated = migrated.replacingOccurrences(
+                of: "`QUIET_CONTENT_HOME/<subject>/<original-name>`",
+                with: "`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`"
+            )
+            if migrated.appending("\n") != memory {
+                try? migrated.appending("\n").write(to: url, atomically: true, encoding: .utf8)
+            }
         }
         NSWorkspace.shared.open(url)
     }

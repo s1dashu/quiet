@@ -170,14 +170,65 @@ const memoryPreferenceGuidance = `
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
 `.trim();
 
+const johnnyDecimalMemoryGuidance = `
+## Johnny.Decimal System
+
+- Use Blackhole's Johnny.Decimal structure directly.
+- New drops enter \`00-09 System management/00 System management/00.01 Inbox for Blackhole\`.
+- The index lives in \`00-09 System management/00 System management/00.00 Index for Blackhole\`.
+- In-progress or unfiled resources stay in \`00.01 Inbox for Blackhole\`.
+- Tasks and project-management material belongs in \`00.02 Task & project management for Blackhole\`.
+- Templates belong in \`00.03 Templates for Blackhole\`.
+- Someday material belongs in \`00.08 Someday for Blackhole\`.
+- Completed or inactive system-management material belongs in \`00.09 Archive for Blackhole\`.
+- Prefer existing numbered areas over creating new top-level folders.
+- User resources that are old/completed belong in \`90-99 Archive 归档\`; system-management archive material belongs in \`00.09 Archive for Blackhole\`.
+
+## Default Numbered Areas
+
+- \`10-19 Personal 个人\`: identity, health, family, education, travel.
+- \`20-29 Money 财务\`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
+- \`30-39 Work 工作\`: meetings, projects, vendors, reports, operations.
+- \`40-49 Legal & Admin 法务行政\`: legal documents, government forms, insurance, certificates.
+- \`50-59 Assets & Property 资产\`: real estate, vehicles, devices, warranties.
+- \`90-99 Archive 归档\`: old, completed, or inactive user resources.
+
+## Destination Pattern
+
+\`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>\`
+`.trim();
+
+function migrateMemoryText(memory) {
+  let next = memory.trim();
+  if (!next.includes("## Learning User Preferences")) {
+    next = `${next}\n\n${memoryPreferenceGuidance}`;
+  }
+
+  const legacyTaxonomyPattern = /\n## (?:Subject Taxonomy|Quiet Decimal Taxonomy)\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
+  if (legacyTaxonomyPattern.test(next)) {
+    next = next.replace(legacyTaxonomyPattern, `\n${johnnyDecimalMemoryGuidance}\n`);
+  } else if (!next.includes("## Johnny.Decimal System")) {
+    const conversationIndex = next.indexOf("\n## Conversation Style");
+    if (conversationIndex >= 0) {
+      next = `${next.slice(0, conversationIndex).trim()}\n\n${johnnyDecimalMemoryGuidance}\n${next.slice(conversationIndex)}`;
+    } else {
+      next = `${next}\n\n${johnnyDecimalMemoryGuidance}`;
+    }
+  }
+
+  next = next.replace(/`QUIET_CONTENT_HOME\/<subject>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`");
+  return `${next.trim()}\n`;
+}
+
 function ensureMemoryFile() {
   if (!existsSync(memoryPath)) {
     writeFileSync(memoryPath, `${defaultMemory}\n`, "utf8");
     return;
   }
   const memory = readFileSync(memoryPath, "utf8");
-  if (!memory.includes("## Learning User Preferences")) {
-    writeFileSync(memoryPath, `${memory.trim()}\n\n${memoryPreferenceGuidance}\n`, "utf8");
+  const migrated = migrateMemoryText(memory);
+  if (migrated !== memory) {
+    writeFileSync(memoryPath, migrated, "utf8");
   }
 }
 
