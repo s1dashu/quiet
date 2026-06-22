@@ -274,6 +274,8 @@ These are user-editable resource organizing rules for Blackhole.
 
 This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
 
+More information: https://johnnydecimal.com/
+
 These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
 - Use Blackhole's Johnny.Decimal structure directly.
@@ -316,6 +318,8 @@ const johnnyDecimalMemoryGuidance = `
 ## Default Method: Johnny.Decimal System
 
 This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+
+More information: https://johnnydecimal.com/
 
 These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
@@ -363,6 +367,7 @@ function migrateMemoryText(memory) {
     && (
       !next.includes("## Default Areas and Categories")
       || next.includes("## Johnny.Decimal System")
+      || !next.includes("https://johnnydecimal.com/")
       || next.includes("Inbox for Blackhole")
       || next.includes("Index for Blackhole")
       || next.includes("Someday material belongs")

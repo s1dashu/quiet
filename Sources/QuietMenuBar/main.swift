@@ -1535,6 +1535,8 @@ final class AgentStore: ObservableObject {
 
             This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
 
+            More information: https://johnnydecimal.com/
+
             These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
             - Use Blackhole's Johnny.Decimal structure directly.
@@ -1580,6 +1582,8 @@ final class AgentStore: ObservableObject {
 
             This is Blackhole's default organizing method. If the user explicitly prefers another method, replace this section with that method.
 
+            More information: https://johnnydecimal.com/
+
             These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
 
             - Use Blackhole's Johnny.Decimal structure directly.
@@ -1613,6 +1617,7 @@ final class AgentStore: ObservableObject {
             } else if !migrated.contains("## Default Method: Johnny.Decimal System")
                 || !migrated.contains("## Default Areas and Categories")
                 || migrated.contains("## Johnny.Decimal System")
+                || !migrated.contains("https://johnnydecimal.com/")
                 || migrated.contains("Inbox for Blackhole")
                 || migrated.contains("Index for Blackhole")
                 || migrated.contains("Someday material belongs")
