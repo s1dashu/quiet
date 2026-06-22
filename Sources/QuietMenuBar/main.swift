@@ -10,6 +10,7 @@ private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 540)
 private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
 private let quietHeaderHeight: CGFloat = 54
+private let quietDesktopHeaderLeadingInset: CGFloat = 78
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
@@ -398,6 +399,7 @@ private extension Notification.Name {
     static let quietFocusComposer = Notification.Name("QuietFocusComposer")
     static let quietAppearanceDidChange = Notification.Name("QuietAppearanceDidChange")
     static let quietOpenDesktopClient = Notification.Name("QuietOpenDesktopClient")
+    static let quietWindowChromeModeDidChange = Notification.Name("QuietWindowChromeModeDidChange")
 }
 
 private func fileURL(fromDropItem item: NSSecureCoding?) -> URL? {
@@ -1607,6 +1609,12 @@ struct QuietView: View {
     @State private var isDropTargeted = false
     @State private var composerInputHeight: CGFloat = 19
     @State private var isSidebarPresented = false
+    @State private var isDesktopChromePresented = false
+
+    private var headerLeadingInset: CGFloat {
+        isDesktopChromePresented ? quietDesktopHeaderLeadingInset : 0
+    }
+
     var body: some View {
         Group {
             if isSettingsPresented {
@@ -1645,6 +1653,9 @@ struct QuietView: View {
         .onReceive(NotificationCenter.default.publisher(for: .quietFocusComposer)) { _ in
             guard !isSettingsPresented else { return }
             isInputFocused = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .quietWindowChromeModeDidChange)) { notification in
+            isDesktopChromePresented = (notification.object as? Bool) == true
         }
         .onChange(of: store.inputText) { _, text in
             if text.isEmpty {
@@ -2003,7 +2014,8 @@ struct QuietView: View {
             .buttonStyle(.plain)
             .help(store.copy.moreActions)
         }
-        .padding(.horizontal, 16)
+        .padding(.leading, 16 + headerLeadingInset)
+        .padding(.trailing, 16)
         .padding(.vertical, 12)
         .background(HeaderDragRegion())
     }
@@ -3920,6 +3932,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setContentSize(quietWindowDefaultSize)
         }
         updateChromeBorder()
+        notifyWindowChromeModeDidChange()
     }
 
     private func configureWindowForDesktopIfNeeded() {
@@ -3929,7 +3942,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowMode = .desktop
         frameKeeper?.frameStorageKey = Self.desktopWindowFrameKey
         NSApp.setActivationPolicy(.regular)
-        window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.collectionBehavior = [.fullScreenPrimary]
         window.isMovableByWindowBackground = true
         window.title = quietAppName
@@ -3954,6 +3967,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.setFrame(NSRect(origin: origin, size: size), display: false)
         }
         updateChromeBorder()
+        notifyWindowChromeModeDidChange()
+    }
+
+    private func notifyWindowChromeModeDidChange() {
+        NotificationCenter.default.post(
+            name: .quietWindowChromeModeDidChange,
+            object: windowMode == .desktop
+        )
     }
 
     private func showStatusItemMenu() {
