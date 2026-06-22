@@ -12,6 +12,8 @@ private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
 private let quietHeaderHeight: CGFloat = 54
 private let quietDesktopHeaderLeadingInset: CGFloat = 78
 private let quietDesktopTrafficLightFallbackInset: CGFloat = 20
+private let quietAppIconResourcePath = "app-icon/blackhole-app-icon.png"
+private let quietSwiftPMResourceBundleName = "Quiet_QuietMenuBar.bundle"
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
@@ -21,6 +23,26 @@ private let quietDropTypeIdentifiers = [
     UTType.plainText.identifier,
     UTType.utf8PlainText.identifier,
 ]
+
+private func quietBundledResourceURL(path: String) -> URL? {
+    let candidates = [
+        Bundle.module.resourceURL?.appendingPathComponent(path),
+        Bundle.main.resourceURL?.appendingPathComponent(path),
+        Bundle.main.resourceURL?
+            .appendingPathComponent(quietSwiftPMResourceBundleName)
+            .appendingPathComponent("Resources")
+            .appendingPathComponent(path),
+        Bundle.main.bundleURL
+            .appendingPathComponent(quietSwiftPMResourceBundleName)
+            .appendingPathComponent("Resources")
+            .appendingPathComponent(path),
+        URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Resources")
+            .appendingPathComponent(path),
+    ]
+    return candidates.compactMap { $0 }.first { FileManager.default.fileExists(atPath: $0.path) }
+}
 
 private enum QuietSecrets {
     private static let modelApiKeyKey = "modelApiKey"
@@ -3699,6 +3721,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowMode: WindowMode = .menuBar
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        applyApplicationIcon()
         NSApp.setActivationPolicy(.accessory)
         setupMainMenu()
         setupStatusItem()
@@ -3878,6 +3901,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hostingView?.layer?.backgroundColor = quietResolvedCGColor(blackholeWindowFill, appearance: appearance)
     }
 
+    private func applyApplicationIcon() {
+        guard let iconURL = quietBundledResourceURL(path: quietAppIconResourcePath),
+              let image = NSImage(contentsOf: iconURL) else {
+            return
+        }
+        image.isTemplate = false
+        NSApp.applicationIconImage = image
+    }
+
     @objc private func toggleWindowFromStatusItem() {
         if NSApp.currentEvent?.type == .rightMouseUp {
             showStatusItemMenu()
@@ -3958,6 +3990,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         windowMode = .desktop
         frameKeeper?.frameStorageKey = Self.desktopWindowFrameKey
         NSApp.setActivationPolicy(.regular)
+        applyApplicationIcon()
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.collectionBehavior = [.fullScreenPrimary]
         window.isMovableByWindowBackground = true
