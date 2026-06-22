@@ -1379,7 +1379,19 @@ final class AgentStore: ObservableObject {
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
         let url = documents.appendingPathComponent("Blackhole", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: url.appendingPathComponent(".inbox", isDirectory: true), withIntermediateDirectories: true)
+        [
+            "00 Inbox 待整理",
+            "01 Needs Review 需确认",
+            "09 System Archive 系统归档",
+            "10-19 Personal 个人",
+            "20-29 Money 财务",
+            "30-39 Work 工作",
+            "40-49 Legal & Admin 法务行政",
+            "50-59 Assets & Property 资产",
+            "90-99 Archive 归档",
+        ].forEach { name in
+            try? FileManager.default.createDirectory(at: url.appendingPathComponent(name, isDirectory: true), withIntermediateDirectories: true)
+        }
         return url
     }
 
@@ -1415,15 +1427,27 @@ final class AgentStore: ObservableObject {
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
 
-            ## Subject Taxonomy
+            ## Quiet Decimal Taxonomy
 
-            - Organize by subject and purpose, not by file extension.
-            - Prefer user-facing subjects such as `票据`, `个人身份信息`, `法务文件`, `财务`, `医疗健康`, `工作`, `家庭`, `学习资料`, `旅行`, `照片`, `软件与安装包`, and `待确认`.
-            - Use a new subject folder when the resource clearly belongs to a subject that is not listed above.
+            - Use Blackhole's Johnny.Decimal-inspired default structure.
+            - New drops enter `00 Inbox 待整理`.
+            - Put resources that need user confirmation in `01 Needs Review 需确认`.
+            - Put user-readable system records in `09 System Archive 系统归档`; do not put original user resources there.
+            - Prefer existing numbered areas over creating new top-level folders.
+            - Use `90-99 Archive 归档` for old/completed user resources, not `09 System Archive 系统归档`.
+
+            ## Default Numbered Areas
+
+            - `10-19 Personal 个人`: identity, health, family, education, travel.
+            - `20-29 Money 财务`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
+            - `30-39 Work 工作`: meetings, projects, vendors, reports, operations.
+            - `40-49 Legal & Admin 法务行政`: legal documents, government forms, insurance, certificates.
+            - `50-59 Assets & Property 资产`: real estate, vehicles, devices, warranties.
+            - `90-99 Archive 归档`: old, completed, or inactive user resources.
 
             ## Destination Pattern
 
-            `QUIET_CONTENT_HOME/<subject>/<original-name>`
+            `QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`
 
             ## Conversation Style
 

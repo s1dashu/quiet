@@ -22,7 +22,9 @@ const require = createRequire(import.meta.url);
 
 const quietHome = resolve(process.env.QUIET_HOME?.trim() || join(homedir(), ".blackhole"));
 const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || join(homedir(), "Documents", "Blackhole"));
-const stagingDir = join(quietContentHome, ".inbox");
+const inboxDir = join(quietContentHome, "00 Inbox 待整理");
+const needsReviewDir = join(quietContentHome, "01 Needs Review 需确认");
+const systemArchiveDir = join(quietContentHome, "09 System Archive 系统归档");
 const filesDir = quietContentHome;
 const logDir = join(quietHome, "logs");
 const agentDir = join(quietHome, "pi-agent");
@@ -38,26 +40,67 @@ const copy = language === "zh"
       startupFailed: "agent 启动失败，请检查模型 API Key 或 node_modules",
       organizeFallback: "请整理这些资源。",
       organizeInstruction: "你现在是 Blackhole 的 pi-coding-agent。请真实使用可用的 pi 工具理解并整理文件、链接、Snippet 和其他资源。",
-      organizeDoneRule: "整理完成后，用中文简短总结你做了什么；不要提内部日志、manifest 或实现文件。",
+      organizeDoneRule: "整理完成后，用中文简短总结你做了什么；不要提内部运行日志、manifest 或实现文件。",
       explainFallback: "请说明你会如何处理丢进 Blackhole 的文件、链接和文本片段。",
-      noStagedResources: "没有资源进入暂存区",
+      noStagedResources: "没有资源进入 00 Inbox",
       taskTitle: "agent 资源整理任务",
     }
   : {
       startupFailed: "Agent failed to start. Check the model API key or node_modules.",
       organizeFallback: "Please organize these resources.",
       organizeInstruction: "You are Blackhole's pi-coding-agent. Use the available pi tools to understand and organize files, links, snippets, and other resources.",
-      organizeDoneRule: "When finished, briefly summarize what you moved and where in English; do not mention internal logs, manifests, or implementation files.",
+      organizeDoneRule: "When finished, briefly summarize what you moved and where in English; do not mention internal runtime logs, manifests, or implementation files.",
       explainFallback: "Explain how you would handle files, links, and snippets dropped into Blackhole.",
-      noStagedResources: "No resources entered staging",
+      noStagedResources: "No resources entered 00 Inbox",
       taskTitle: "Agent resource organization task",
     };
 
-mkdirSync(stagingDir, { recursive: true });
 mkdirSync(filesDir, { recursive: true });
 mkdirSync(logDir, { recursive: true });
 mkdirSync(agentDir, { recursive: true });
 mkdirSync(workspaceDir, { recursive: true });
+
+function ensureQuietDecimalStructure() {
+  const dirs = [
+    inboxDir,
+    needsReviewDir,
+    systemArchiveDir,
+    join(quietContentHome, "10-19 Personal 个人"),
+    join(quietContentHome, "20-29 Money 财务"),
+    join(quietContentHome, "30-39 Work 工作"),
+    join(quietContentHome, "40-49 Legal & Admin 法务行政"),
+    join(quietContentHome, "50-59 Assets & Property 资产"),
+    join(quietContentHome, "90-99 Archive 归档"),
+  ];
+  for (const dir of dirs) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const indexPath = join(systemArchiveDir, "quiet-decimal-index.md");
+  if (!existsSync(indexPath)) {
+    writeFileSync(indexPath, `# Quiet Decimal Index
+
+Quiet uses a Johnny.Decimal-inspired structure. The number is the stable address; the text is for humans.
+
+## System
+
+- 00 Inbox 待整理: newly dropped resources and in-progress batches.
+- 01 Needs Review 需确认: resources Blackhole inspected but should not decide alone.
+- 09 System Archive 系统归档: user-readable Quiet Decimal records and archived system notes. Do not store original user resources here.
+
+## Default Areas
+
+- 10-19 Personal 个人
+- 20-29 Money 财务
+- 30-39 Work 工作
+- 40-49 Legal & Admin 法务行政
+- 50-59 Assets & Property 资产
+- 90-99 Archive 归档
+`, "utf8");
+  }
+}
+
+ensureQuietDecimalStructure();
 
 const defaultMemory = `
 # Blackhole Memory
@@ -71,15 +114,27 @@ These are user-editable resource organizing rules for Blackhole.
 - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
 
-## Subject Taxonomy
+## Quiet Decimal Taxonomy
 
-- Organize by subject and purpose, not by file extension.
-- Prefer user-facing subjects such as \`票据\`, \`个人身份信息\`, \`法务文件\`, \`财务\`, \`医疗健康\`, \`工作\`, \`家庭\`, \`学习资料\`, \`旅行\`, \`照片\`, \`软件与安装包\`, and \`待确认\`.
-- Use a new subject folder when the resource clearly belongs to a subject that is not listed above.
+- Use Blackhole's Johnny.Decimal-inspired default structure.
+- New drops enter \`00 Inbox 待整理\`.
+- Put resources that need user confirmation in \`01 Needs Review 需确认\`.
+- Put user-readable system records in \`09 System Archive 系统归档\`; do not put original user resources there.
+- Prefer existing numbered areas over creating new top-level folders.
+- Use \`90-99 Archive 归档\` for old/completed user resources, not \`09 System Archive 系统归档\`.
+
+## Default Numbered Areas
+
+- \`10-19 Personal 个人\`: identity, health, family, education, travel.
+- \`20-29 Money 财务\`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
+- \`30-39 Work 工作\`: meetings, projects, vendors, reports, operations.
+- \`40-49 Legal & Admin 法务行政\`: legal documents, government forms, insurance, certificates.
+- \`50-59 Assets & Property 资产\`: real estate, vehicles, devices, warranties.
+- \`90-99 Archive 归档\`: old, completed, or inactive user resources.
 
 ## Destination Pattern
 
-\`QUIET_CONTENT_HOME/<subject>/<original-name>\`
+\`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>\`
 
 ## Conversation Style
 
@@ -191,8 +246,8 @@ function removeEmptyDirectories(root, { includeRoot = false } = {}) {
   return false;
 }
 
-function cleanupStagingDirectories() {
-  removeEmptyDirectories(stagingDir);
+function cleanupInboxDirectories() {
+  removeEmptyDirectories(inboxDir);
 }
 
 function safeName(name) {
@@ -241,9 +296,9 @@ async function movePath(source, destination) {
   }
 }
 
-async function ingestToStaging(paths) {
+async function ingestToInbox(paths) {
   const batchId = new Date().toISOString().replace(/[:.]/g, "-");
-  const batchDir = join(stagingDir, batchId);
+  const batchDir = join(inboxDir, batchId);
   mkdirSync(batchDir, { recursive: true });
   const ingested = [];
   const failed = [];
@@ -261,7 +316,7 @@ async function ingestToStaging(paths) {
       await movePath(source, destination);
       ingested.push({
         originalSource: source,
-        stagingPath: destination,
+        inboxPath: destination,
         originalName: safeName(source.split(sep).at(-1)),
       });
     } catch (error) {
@@ -281,9 +336,9 @@ function resourceMarkdown(resource, capturedAt) {
   return `# Snippet\n\n- Captured: ${capturedAt}\n\n## Content\n\n\`\`\`text\n${value}\n\`\`\`\n`;
 }
 
-async function ingestResourcesToStaging(resources) {
+async function ingestResourcesToInbox(resources) {
   const batchId = new Date().toISOString().replace(/[:.]/g, "-");
-  const batchDir = join(stagingDir, batchId);
+  const batchDir = join(inboxDir, batchId);
   mkdirSync(batchDir, { recursive: true });
   const capturedAt = new Date().toISOString();
   const ingested = [];
@@ -301,7 +356,7 @@ async function ingestResourcesToStaging(resources) {
       writeFileSync(destination, resourceMarkdown({ kind, value }, capturedAt), "utf8");
       ingested.push({
         originalSource: kind,
-        stagingPath: destination,
+        inboxPath: destination,
         originalName: safeName(kind === "link" ? `Link: ${value}` : `Snippet: ${value.slice(0, 60)}`),
       });
     } catch (error) {
@@ -310,6 +365,53 @@ async function ingestResourcesToStaging(resources) {
   }
 
   return { batchId, batchDir, ingested, failed };
+}
+
+function writeSystemArchiveRecord({ batchId, startedAt, finishedAt, ingested, failed }) {
+  ensureQuietDecimalStructure();
+  const safeBatchId = safeName(batchId || new Date().toISOString().replace(/[:.]/g, "-"));
+  const items = ingested.map((item) => ({
+    originalName: item.originalName,
+    originalSource: item.originalSource,
+    inboxPath: item.inboxPath,
+    status: existsSync(item.inboxPath) ? "still_in_inbox_or_needs_review" : "moved_from_inbox",
+  }));
+  const record = {
+    batchId: safeBatchId,
+    startedAt,
+    finishedAt,
+    contentRoot: quietContentHome,
+    inbox: inboxDir,
+    needsReview: needsReviewDir,
+    systemArchive: systemArchiveDir,
+    items,
+    failed,
+  };
+  const jsonPath = uniqueDestination(systemArchiveDir, `${safeBatchId}.json`);
+  writeFileSync(jsonPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+
+  const moved = items.filter((item) => item.status === "moved_from_inbox").length;
+  const waiting = items.length - moved;
+  const mdPath = uniqueDestination(systemArchiveDir, `${safeBatchId}.md`);
+  writeFileSync(mdPath, `# Quiet Decimal Batch ${safeBatchId}
+
+- Started: ${startedAt}
+- Finished: ${finishedAt}
+- Content root: ${quietContentHome}
+- Entered 00 Inbox: ${items.length}
+- Moved from 00 Inbox: ${moved}
+- Still awaiting review or retry: ${waiting}
+- Failed before inbox: ${failed.length}
+
+## Items
+
+${items.map((item) => `- ${item.originalName}: ${item.status}`).join("\n") || "- None"}
+
+## Failed Before Inbox
+
+${failed.map((item) => `- ${item.source}: ${item.reason}`).join("\n") || "- None"}
+`, "utf8");
+  return { jsonPath, mdPath };
 }
 
 function findPackageEntry(packageName) {
@@ -806,25 +908,31 @@ function buildOrganizePrompt(paths, userText) {
   const resourceList = paths.map(shortStat);
   const rules = language === "zh"
     ? `硬性规则：
-1. 只处理本次列出的隐藏暂存资源：${stagingDir}
+1. 只处理本次列出的 00 Inbox 资源：${inboxDir}
 2. 请按 ~/.blackhole/memory.md 的规则理解用户的偏好并整理。
-3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后暂存源路径不应继续存在。
+3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后 00 Inbox 源路径不应继续存在。
 4. 整理后的文件只能放到 Blackhole 根目录：${filesDir}
-5. 默认按 subject/用途建立一级文件夹，例如：票据、个人身份信息、法务文件、财务、医疗健康、工作、家庭、学习资料、旅行、照片、软件与安装包、待确认。
-6. 目标路径使用 ${filesDir}/<subject>/<original-name>；不要创建额外的系统目录。
-7. 不要新建摘要、索引、报告或说明文档；如需说明，只在对用户的最终回复里简短总结。
-8. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
-9. ${copy.organizeDoneRule}`
+5. 默认使用 Quiet Decimal 编号结构；优先放进已有编号区域，不要回到旧的纯 subject 一级目录。
+6. 常用区域：10-19 Personal 个人、20-29 Money 财务、30-39 Work 工作、40-49 Legal & Admin 法务行政、50-59 Assets & Property 资产、90-99 Archive 归档。
+7. 低置信度、敏感冲突、重复冲突、文件名与内容矛盾、或需要用户确认的资源，移动到 ${needsReviewDir}。
+8. ${systemArchiveDir} 只放 Blackhole 自己生成的用户可读系统归档记录；不要把原始用户资源放进去。旧的已完成用户资源应放入 90-99 Archive 归档。
+9. 目标路径使用 ${filesDir}/<numbered-area>/<numbered-category-or-topic>/<original-name>。
+10. 不要新建摘要、索引、报告或说明文档；如需说明，只在对用户的最终回复里简短总结。
+11. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
+12. ${copy.organizeDoneRule}`
     : `Hard rules:
-1. Only process the hidden staging resources listed in this task: ${stagingDir}
+1. Only process the 00 Inbox resources listed in this task: ${inboxDir}
 2. Follow ~/.blackhole/memory.md to understand the user's preferences and organize accordingly.
-3. Move with mv; do not copy or delete user files or resources. After a successful move, the staging source path should no longer exist.
+3. Move with mv; do not copy or delete user files or resources. After a successful move, the 00 Inbox source path should no longer exist.
 4. Organized files must stay directly under the Blackhole root: ${filesDir}
-5. By default, create first-level folders by subject/purpose, for example: Receipts, Personal Identity, Legal Documents, Finance, Health, Work, Family, Study Materials, Travel, Photos, Software and Installers, Needs Review.
-6. Use ${filesDir}/<subject>/<original-name> as the destination pattern. Do not create extra system folders.
-7. Do not create summaries, indexes, reports, or notes as files. Summarize only in the final user-facing reply.
-8. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
-9. ${copy.organizeDoneRule}`;
+5. Use the Quiet Decimal numbered structure by default. Prefer existing numbered areas; do not fall back to old plain subject top-level folders.
+6. Common areas: 10-19 Personal, 20-29 Money, 30-39 Work, 40-49 Legal & Admin, 50-59 Assets & Property, 90-99 Archive.
+7. Move low-confidence, sensitive/conflicting, duplicate-conflicting, filename/content mismatch, or user-confirmation-needed resources to ${needsReviewDir}.
+8. ${systemArchiveDir} is only for Blackhole-created user-readable system archive records. Do not put original user resources there. Old/completed user resources belong in 90-99 Archive.
+9. Use ${filesDir}/<numbered-area>/<numbered-category-or-topic>/<original-name> as the destination pattern.
+10. Do not create summaries, indexes, reports, or notes as files. Summarize only in the final user-facing reply.
+11. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
+12. ${copy.organizeDoneRule}`;
   const pendingLabel = language === "zh" ? "待整理资源" : "Resources to organize";
   return `
 ${userText || copy.organizeFallback}
@@ -835,7 +943,9 @@ ${rules}
 
 Blackhole dirs:
 - content root: ${quietContentHome}
-- hidden staging: ${stagingDir}
+- 00 Inbox: ${inboxDir}
+- 01 Needs Review: ${needsReviewDir}
+- 09 System Archive: ${systemArchiveDir}
 
 ${pendingLabel}:
 ${JSON.stringify(resourceList, null, 2)}
@@ -855,38 +965,47 @@ async function handleUserMessage(message) {
     : [];
 
   if (paths.length > 0 || resources.length > 0) {
-    emit({ type: "status", value: `正在移入隐藏暂存区：${paths.length + resources.length} 项` });
+    emit({ type: "status", value: `正在移入 00 Inbox：${paths.length + resources.length} 项` });
+    const startedAt = new Date().toISOString();
     const fileIngestion = paths.length > 0
-      ? await ingestToStaging(paths)
+      ? await ingestToInbox(paths)
       : { ingested: [], failed: [] };
     const resourceIngestion = resources.length > 0
-      ? await ingestResourcesToStaging(resources)
+      ? await ingestResourcesToInbox(resources)
       : { ingested: [], failed: [] };
     const ingested = [...fileIngestion.ingested, ...resourceIngestion.ingested];
     const failed = [...fileIngestion.failed, ...resourceIngestion.failed];
     if (failed.length > 0) {
       emit({
         type: "error",
-        message: `有 ${failed.length} 项未能进入隐藏暂存区：${failed[0].reason}`,
+        message: `有 ${failed.length} 项未能进入 00 Inbox：${failed[0].reason}`,
       });
     }
     if (ingested.length === 0) {
       emit({ type: "status", value: copy.noStagedResources });
-      cleanupStagingDirectories();
+      cleanupInboxDirectories();
       return;
     }
-    const stagingPaths = ingested.map((item) => item.stagingPath);
+    const batchId = fileIngestion.batchId || resourceIngestion.batchId || startedAt.replace(/[:.]/g, "-");
+    const inboxPaths = ingested.map((item) => item.inboxPath);
     emit({ type: "status", value: "agent 工作中" });
     emit({
       type: "plan",
       title: copy.taskTitle,
-      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/<subject>`),
+      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/<numbered-area>`),
     });
     const session = await getPiSession();
     try {
-      await session.prompt(buildOrganizePrompt(stagingPaths, text), { source: "interactive" });
+      await session.prompt(buildOrganizePrompt(inboxPaths, text), { source: "interactive" });
     } finally {
-      cleanupStagingDirectories();
+      writeSystemArchiveRecord({
+        batchId,
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        ingested,
+        failed,
+      });
+      cleanupInboxDirectories();
     }
     return;
   }
@@ -903,7 +1022,9 @@ emit({
   protocol: "blackhole-pi-jsonl-v1",
   app: "blackhole",
   filesRoot: filesDir,
-  staging: stagingDir,
+  inbox: inboxDir,
+  needsReview: needsReviewDir,
+  systemArchive: systemArchiveDir,
 });
 
 void getPiSession().catch((error) => {

@@ -22,8 +22,12 @@ Treat the SwiftPM `QuietMenuBar` target as the active app. Build output under `.
 - App name: `Quiet`.
 - Runtime data root: `~/.quiet`.
 - User-visible content root: `~/Documents/Blackhole`.
-- Dragged files first go to hidden staging under `~/Documents/Blackhole/.inbox/<batch-id>`.
-- The pi agent organizes files directly under `~/Documents/Blackhole` by subject, for example `票据`, `个人身份信息`, `法务文件`, `财务`, and `医疗健康`.
+- Dragged files first go to visible inbox batches under `~/Documents/Blackhole/00 Inbox 待整理/<batch-id>`.
+- The pi agent organizes files using the default Quiet Decimal structure, inspired by Johnny.Decimal:
+  - `00 Inbox 待整理` for new drops and in-progress batches.
+  - `01 Needs Review 需确认` for low-confidence, sensitive/conflicting, duplicate-conflicting, or user-confirmation-needed resources.
+  - `09 System Archive 系统归档` for Blackhole-created user-readable system archive records only, not original user resources.
+  - `10-19 Personal 个人`, `20-29 Money 财务`, `30-39 Work 工作`, `40-49 Legal & Admin 法务行政`, `50-59 Assets & Property 资产`, and `90-99 Archive 归档` for organized user resources.
 - Keep generated or explanatory content in chat unless the user explicitly asks for files.
 - Undo logs go to `~/.blackhole/undo`.
 
