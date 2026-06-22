@@ -172,7 +172,7 @@ private let quietMarkdownCodeFill = quietDynamicColor(
 )
 private let blackholeWindowFill = quietDynamicNSColor(
     light: NSColor.white,
-    dark: NSColor(calibratedWhite: 0.015, alpha: 1)
+    dark: NSColor(calibratedWhite: 0.04, alpha: 1)
 )
 private let blackholePanelFill = quietDynamicNSColor(
     light: NSColor.white,
@@ -349,7 +349,7 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             openDesktopClient: "Open desktop app",
             openFiles: "Open files",
             quit: "Quit Blackhole",
-            composerPlaceholder: "Paste links, snippets, or type a message...",
+            composerPlaceholder: "Drop files, links, snippets, or type a message...",
             dropOverlay: "Release to capture resources",
             statusTooltip: "\(quietAppName) - drop files, links, or snippets",
             unknownError: "Unknown error",
@@ -420,6 +420,7 @@ struct ModelProviderOption: Identifiable, Equatable {
 
 private extension Notification.Name {
     static let quietFocusComposer = Notification.Name("QuietFocusComposer")
+    static let quietRestoreFollowLatest = Notification.Name("QuietRestoreFollowLatest")
     static let quietAppearanceDidChange = Notification.Name("QuietAppearanceDidChange")
     static let quietOpenDesktopClient = Notification.Name("QuietOpenDesktopClient")
     static let quietWindowChromeModeDidChange = Notification.Name("QuietWindowChromeModeDidChange")
@@ -684,6 +685,7 @@ final class AgentStore: ObservableObject {
     private var toolMessageIdsByToolId: [String: String] = [:]
     private var turnWaitTask: Task<Void, Never>?
     private var isRestartingAgent = false
+    private var isAwaitingSessionActivation = false
     private var lastHistoryLoadAt = Date.distantPast
     private var pendingHistoryAnchorMessageId: String?
 
@@ -706,13 +708,7 @@ final class AgentStore: ObservableObject {
         thinkingLevel = UserDefaults.standard.string(forKey: "quiet.thinking.level") ?? "medium"
         appearanceMode = QuietAppearanceMode.normalized(UserDefaults.standard.string(forKey: quietAppearanceModeKey))
         status = copy.startingStatus
-        messages = [
-            ChatMessage(
-                id: UUID().uuidString,
-                role: .assistant,
-                text: copy.initialMessage
-            )
-        ]
+        messages = []
         startAgent()
     }
 
@@ -746,14 +742,10 @@ final class AgentStore: ObservableObject {
         lastDroppedPaths = []
         inputContainsPastedResource = false
         resetStreamingState()
+        resetHistoryPagination()
+        isAwaitingSessionActivation = true
         status = copy.readyStatus
-        messages = [
-            ChatMessage(
-                id: UUID().uuidString,
-                role: .assistant,
-                text: copy.initialMessage
-            )
-        ]
+        messages = []
         writeJSONLine(["type": "new_session"])
     }
 
@@ -772,6 +764,7 @@ final class AgentStore: ObservableObject {
         lastDroppedPaths = []
         inputContainsPastedResource = false
         resetStreamingState()
+        isAwaitingSessionActivation = true
         currentSessionPath = session.path
         writeJSONLine(["type": "open_session", "path": session.path])
     }
@@ -941,6 +934,7 @@ final class AgentStore: ObservableObject {
         if !text.isEmpty {
             messages.append(ChatMessage(id: UUID().uuidString, role: .user, text: text))
         }
+        NotificationCenter.default.post(name: .quietRestoreFollowLatest, object: nil)
 
         let payload: [String: Any] = [
             "type": "user_message",
@@ -992,12 +986,15 @@ final class AgentStore: ObservableObject {
         case "session_reset":
             isAgentReady = true
             currentSessionPath = object["path"] as? String ?? currentSessionPath
+            isAwaitingSessionActivation = false
             resetStreamingState()
+            resetHistoryPagination()
             status = copy.readyStatus
         case "session_list":
             updateSessionList(from: object)
         case "session_opened":
             currentSessionPath = object["path"] as? String ?? currentSessionPath
+            isAwaitingSessionActivation = false
             restoreMessages(from: object["messages"] as? [[String: Any]] ?? [])
             resetStreamingState()
             hasMoreHistory = object["hasMore"] as? Bool ?? false
@@ -1022,6 +1019,7 @@ final class AgentStore: ObservableObject {
             pendingHistoryAnchorMessageId = nil
         case "session_ready":
             currentSessionPath = object["path"] as? String ?? currentSessionPath
+            isAwaitingSessionActivation = false
             resetStreamingState()
             status = copy.readyStatus
         case "session_deleted":
@@ -1031,6 +1029,7 @@ final class AgentStore: ObservableObject {
         case "model_registry":
             updateModelRegistry(from: object)
         case "status":
+            guard shouldAcceptSessionEvent(object) else { return }
             status = object["value"] as? String ?? status
             let normalizedStatus = status.lowercased()
             if status.contains("完成") || status.contains("失败") || normalizedStatus.contains("done") || normalizedStatus.contains("complete") || normalizedStatus.contains("failed") {
@@ -1041,6 +1040,7 @@ final class AgentStore: ObservableObject {
                 updateTurnWaitIndicator()
             }
         case "assistant_start":
+            guard shouldAcceptSessionEvent(object) else { return }
             isAgentWorking = true
             let agentId = object["id"] as? String ?? UUID().uuidString
             let messageId = UUID().uuidString
@@ -1048,6 +1048,7 @@ final class AgentStore: ObservableObject {
             messages.append(ChatMessage(id: messageId, role: .assistant, text: "", messageStatus: .streaming))
             updateTurnWaitIndicator()
         case "assistant_delta":
+            guard shouldAcceptSessionEvent(object) else { return }
             guard let agentId = object["id"] as? String,
                   let messageId = assistantMessageIdsByAgentId[agentId],
                   let delta = object["text"] as? String,
@@ -1058,6 +1059,7 @@ final class AgentStore: ObservableObject {
             messages[index].messageStatus = .streaming
             updateTurnWaitIndicator()
         case "assistant_done":
+            guard shouldAcceptSessionEvent(object) else { return }
             if let agentId = object["id"] as? String,
                let messageId = assistantMessageIdsByAgentId[agentId],
                let index = messages.firstIndex(where: { $0.id == messageId }) {
@@ -1067,10 +1069,12 @@ final class AgentStore: ObservableObject {
         case "plan":
             break
         case "organized":
+            guard shouldAcceptSessionEvent(object) else { return }
             if let filesRoot = object["filesRoot"] as? String {
                 filesPath = filesRoot
             }
         case "tool_start":
+            guard shouldAcceptSessionEvent(object) else { return }
             isAgentWorking = true
             let id = object["id"] as? String ?? UUID().uuidString
             let name = object["name"] as? String ?? "tool"
@@ -1088,6 +1092,7 @@ final class AgentStore: ObservableObject {
             ))
             updateTurnWaitIndicator()
         case "tool_update":
+            guard shouldAcceptSessionEvent(object) else { return }
             status = copy.workingStatus
             if let id = object["id"] as? String,
                let messageId = toolMessageIdsByToolId[id],
@@ -1119,6 +1124,7 @@ final class AgentStore: ObservableObject {
             }
             updateTurnWaitIndicator()
         case "tool_end":
+            guard shouldAcceptSessionEvent(object) else { return }
             let id = object["id"] as? String ?? UUID().uuidString
             let name = object["name"] as? String ?? "tool"
             let isError = object["isError"] as? Bool ?? false
@@ -1146,16 +1152,20 @@ final class AgentStore: ObservableObject {
             }
             updateTurnWaitIndicator()
         case "thinking_start":
+            guard shouldAcceptSessionEvent(object) else { return }
             isAgentWorking = true
             status = copy.workingStatus
             updateTurnWaitIndicator()
         case "thinking_delta":
+            guard shouldAcceptSessionEvent(object) else { return }
             isAgentWorking = true
             status = copy.workingStatus
             updateTurnWaitIndicator()
         case "thinking_end":
+            guard shouldAcceptSessionEvent(object) else { return }
             updateTurnWaitIndicator()
         case "error":
+            guard shouldAcceptSessionEvent(object) else { return }
             isAgentWorking = false
             updateTurnWaitIndicator()
             let message = object["message"] as? String ?? copy.unknownError
@@ -1180,6 +1190,24 @@ final class AgentStore: ObservableObject {
         toolMessageIdsByToolId.removeAll()
         turnWaitTask?.cancel()
         turnWaitTask = nil
+    }
+
+    private func shouldAcceptSessionEvent(_ object: [String: Any]) -> Bool {
+        guard let eventSessionPath = object["sessionPath"] as? String,
+              !eventSessionPath.isEmpty else {
+            return !isAwaitingSessionActivation
+        }
+
+        guard !isAwaitingSessionActivation else { return false }
+        return eventSessionPath == currentSessionPath
+    }
+
+    private func resetHistoryPagination() {
+        hasMoreHistory = false
+        isLoadingHistory = false
+        lastHistoryLoadAt = .distantPast
+        pendingHistoryAnchorMessageId = nil
+        historyAnchorMessageId = nil
     }
 
     private func updateSessionList(from object: [String: Any]) {
@@ -1209,9 +1237,7 @@ final class AgentStore: ObservableObject {
         var transaction = Transaction(animation: nil)
         transaction.disablesAnimations = true
         withTransaction(transaction) {
-            messages = restored.isEmpty
-                ? [ChatMessage(id: UUID().uuidString, role: .assistant, text: copy.initialMessage)]
-                : restored
+            messages = restored
         }
     }
 
@@ -1352,9 +1378,8 @@ final class AgentStore: ObservableObject {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
         let url = documents.appendingPathComponent("Blackhole", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url.appendingPathComponent("Inbox", isDirectory: true), withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: url.appendingPathComponent("Files", isDirectory: true), withIntermediateDirectories: true)
-        try? FileManager.default.createDirectory(at: url.appendingPathComponent("Output", isDirectory: true), withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: url.appendingPathComponent(".inbox", isDirectory: true), withIntermediateDirectories: true)
         return url
     }
 
@@ -1371,7 +1396,7 @@ final class AgentStore: ObservableObject {
     }
 
     func openFiles() {
-        let path = filesPath.isEmpty ? contentDirectory().appendingPathComponent("Files", isDirectory: true).path : filesPath
+        let path = filesPath.isEmpty ? contentDirectory().path : filesPath
         NSWorkspace.shared.open(URL(fileURLWithPath: path))
     }
 
@@ -1390,24 +1415,15 @@ final class AgentStore: ObservableObject {
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
 
-            ## Resource Taxonomy
+            ## Subject Taxonomy
 
-            - Images: png, jpg, jpeg, gif, webp, heic, tiff, svg, psd, ai, sketch, fig
-            - Documents: pdf, doc, docx, txt, md, rtf, pages, epub
-            - Sheets: xls, xlsx, csv, numbers
-            - Slides: ppt, pptx, key
-            - Archives: zip, rar, 7z, tar, gz, dmg, pkg
-            - Code: js, jsx, ts, tsx, mjs, cjs, py, rb, go, rs, swift, java, kt, html, css, json, yaml, yml, toml, sh
-            - Links: saved URLs and web references
-            - Snippets: pasted text, notes, prompts, and copied references
-            - Audio: mp3, wav, aac, flac, m4a
-            - Video: mp4, mov, avi, mkv, webm
-            - Folders: directories
-            - Other: everything else
+            - Organize by subject and purpose, not by file extension.
+            - Prefer user-facing subjects such as `票据`, `个人身份信息`, `法务文件`, `财务`, `医疗健康`, `工作`, `家庭`, `学习资料`, `旅行`, `照片`, `软件与安装包`, and `待确认`.
+            - Use a new subject folder when the resource clearly belongs to a subject that is not listed above.
 
             ## Destination Pattern
 
-            `QUIET_CONTENT_HOME/Files/<category>/<YYYY-MM>/<original-name>`
+            `QUIET_CONTENT_HOME/<subject>/<original-name>`
 
             ## Conversation Style
 
@@ -1623,9 +1639,14 @@ struct QuietView: View {
     @State private var isInputFocused = false
     @State private var scrollOffset: CGFloat = 0
     @State private var scrollContentHeight: CGFloat = 1
+    @State private var scrollbarContentHeight: CGFloat = 1
     @State private var scrollViewportHeight: CGFloat = 1
+    @State private var isScrollbarStabilizing = false
+    @State private var scrollbarStabilizationToken = 0
     @State private var isFollowingLatest = true
     @State private var showFollowButton = false
+    @State private var isRestoringFollow = false
+    @State private var followRestoreToken = 0
     @State private var isSettingsPresented = false
     @State private var settingsApiKeyFocusRequest = 0
     @State private var showCredentialPrompt = false
@@ -1663,7 +1684,7 @@ struct QuietView: View {
         .overlay {
             if isDropTargeted {
                 FileDropTargetOverlay(text: store.copy.dropOverlay)
-                    .padding(10)
+                    .padding(6)
                     .transition(.opacity.combined(with: .scale(scale: 0.985)))
             }
         }
@@ -1760,13 +1781,15 @@ struct QuietView: View {
                         ZStack(alignment: .bottom) {
                             ScrollView(.vertical, showsIndicators: false) {
                                 LazyVStack(alignment: .leading, spacing: 10) {
-                                    GeometryReader { geometry in
-                                        Color.clear.preference(
-                                            key: ScrollOffsetPreferenceKey.self,
-                                            value: max(0, -geometry.frame(in: .named("quietMessages")).minY)
+                                    ChatScrollMetricsReader { offset, viewportHeight, contentHeight in
+                                        updateScrollMetrics(
+                                            offset: offset,
+                                            viewportHeight: viewportHeight,
+                                            contentHeight: contentHeight
                                         )
                                     }
-                                    .frame(height: 0)
+                                    .frame(width: 0, height: 0)
+                                    .allowsHitTesting(false)
 
                                     if store.isLoadingHistory {
                                         HStack {
@@ -1805,14 +1828,6 @@ struct QuietView: View {
                                 .padding(.horizontal, 14)
                                 .padding(.top, 2)
                                 .padding(.bottom, 4)
-                                .background {
-                                    GeometryReader { geometry in
-                                        Color.clear.preference(
-                                            key: ScrollContentHeightPreferenceKey.self,
-                                            value: geometry.size.height
-                                        )
-                                    }
-                                }
                             }
                             .coordinateSpace(name: "quietMessages")
                             .onChange(of: store.messages.last?.id) { _, id in
@@ -1841,6 +1856,7 @@ struct QuietView: View {
                                 }
                             }
                             .onChange(of: store.sessionScrollRequest) { _, _ in
+                                beginScrollbarStabilization()
                                 isFollowingLatest = true
                                 showFollowButton = false
                                 var transaction = Transaction(animation: nil)
@@ -1866,16 +1882,15 @@ struct QuietView: View {
                                     }
                                 }
                             }
+                            .onReceive(NotificationCenter.default.publisher(for: .quietRestoreFollowLatest)) { _ in
+                                restoreFollowToLatest(proxy: proxy)
+                            }
 
                             if showFollowButton {
                                 HStack {
                                     Spacer(minLength: 0)
                                     Button {
-                                        isFollowingLatest = true
-                                        showFollowButton = false
-                                        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
-                                            proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
-                                        }
+                                        restoreFollowToLatest(proxy: proxy)
                                     } label: {
                                         LucideIcon(id: "arrow-down", fallbackSystemName: "arrow.down")
                                             .frame(width: 15, height: 15)
@@ -1894,13 +1909,14 @@ struct QuietView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding(.bottom, 10)
                                 .transition(.opacity.combined(with: .move(edge: .bottom)))
+                                .zIndex(2)
                             }
                         }
 
                         SwiftUIChatScrollbar(
                             offset: scrollOffset,
                             viewportHeight: scrollViewportHeight,
-                            contentHeight: scrollContentHeight,
+                            contentHeight: scrollbarContentHeight,
                             onScrollToProgress: { progress in
                                 scrollToProgress(progress, proxy: proxy)
                             }
@@ -1909,37 +1925,111 @@ struct QuietView: View {
                         .frame(maxHeight: .infinity)
                         .padding(.trailing, 4)
                         .padding(.vertical, 8)
+                        .opacity(isScrollbarStabilizing ? 0 : 1)
                         .zIndex(1)
                     }
                 }
             }
             .onAppear {
                 scrollViewportHeight = viewport.size.height
+                scrollbarContentHeight = scrollContentHeight
             }
             .onChange(of: viewport.size.height) { _, height in
                 scrollViewportHeight = height
+                if !isScrollbarStabilizing {
+                    scrollbarContentHeight = scrollContentHeight
+                }
                 updateFollowState(offset: scrollOffset, contentHeight: scrollContentHeight, viewportHeight: height)
             }
         }
-        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { offset in
-            scrollOffset = offset
-            updateFollowState(offset: offset, contentHeight: scrollContentHeight, viewportHeight: scrollViewportHeight)
-            if offset < 90,
-               scrollContentHeight > scrollViewportHeight + 8,
-               !isFollowingLatest {
-                store.loadMoreHistoryIfNeeded()
-            }
+        .animation(.easeOut(duration: 0.14), value: isDropTargeted)
+    }
+
+    private func updateScrollMetrics(offset: CGFloat, viewportHeight: CGFloat, contentHeight: CGFloat) {
+        let previousOffset = scrollOffset
+        scrollOffset = offset
+        scrollViewportHeight = viewportHeight
+
+        let height = max(1, contentHeight)
+        let isScrollable = height > viewportHeight + 8
+        let didScrollAwayFromLatest = !isRestoringFollow && isScrollable && offset < previousOffset - 3
+        if didScrollAwayFromLatest {
+            isFollowingLatest = false
+            showFollowButton = true
         }
-        .onPreferenceChange(ScrollContentHeightPreferenceKey.self) { height in
+
+        if abs(scrollContentHeight - height) > 0.5 {
             let previousHeight = scrollContentHeight
-            scrollContentHeight = max(1, height)
+            scrollContentHeight = height
+            if isScrollbarStabilizing {
+                scheduleScrollbarStabilizationSettle()
+            } else {
+                scrollbarContentHeight = height
+            }
             if isFollowingLatest, height >= previousHeight {
                 showFollowButton = false
                 return
             }
-            updateFollowState(offset: scrollOffset, contentHeight: max(1, height), viewportHeight: scrollViewportHeight)
         }
-        .animation(.easeOut(duration: 0.14), value: isDropTargeted)
+
+        if didScrollAwayFromLatest {
+            return
+        }
+
+        updateFollowState(offset: offset, contentHeight: height, viewportHeight: viewportHeight)
+        if offset < 90,
+           height > viewportHeight + 8,
+           !isFollowingLatest {
+            store.loadMoreHistoryIfNeeded()
+        }
+    }
+
+    private func beginScrollbarStabilization() {
+        isScrollbarStabilizing = true
+        scrollbarContentHeight = max(scrollViewportHeight, scrollContentHeight)
+        scheduleScrollbarStabilizationSettle()
+    }
+
+    private func scheduleScrollbarStabilizationSettle() {
+        scrollbarStabilizationToken += 1
+        let token = scrollbarStabilizationToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+            guard token == scrollbarStabilizationToken else { return }
+            scrollbarContentHeight = scrollContentHeight
+            isScrollbarStabilizing = false
+        }
+    }
+
+    private func restoreFollowToLatest(proxy: ScrollViewProxy) {
+        followRestoreToken += 1
+        let token = followRestoreToken
+        isRestoringFollow = true
+        isFollowingLatest = true
+        showFollowButton = false
+
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+            proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+        }
+
+        DispatchQueue.main.async {
+            guard token == followRestoreToken else { return }
+            proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
+            guard token == followRestoreToken else { return }
+            proxy.scrollTo(messageBottomAnchorId, anchor: .bottom)
+        }
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.36) {
+            guard token == followRestoreToken else { return }
+            isRestoringFollow = false
+            updateFollowState(
+                offset: scrollOffset,
+                contentHeight: scrollContentHeight,
+                viewportHeight: scrollViewportHeight
+            )
+        }
     }
 
     private func updateFollowState(offset: CGFloat, contentHeight: CGFloat, viewportHeight: CGFloat) {
@@ -1953,6 +2043,8 @@ struct QuietView: View {
         let isAtLatest = distanceFromBottom < 28
         if isAtLatest {
             isFollowingLatest = true
+            showFollowButton = false
+        } else if isFollowingLatest {
             showFollowButton = false
         } else {
             isFollowingLatest = false
@@ -1992,7 +2084,7 @@ struct QuietView: View {
             .help(isSidebarPresented ? "收起会话列表" : "展开会话列表")
 
             Text(quietAppName)
-                .font(.system(size: 19, weight: .semibold).italic())
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(quietChatText)
                 .shadow(color: .black.opacity(0.22), radius: 0.35, x: 0, y: 0.35)
 
@@ -2020,6 +2112,12 @@ struct QuietView: View {
                     NotificationCenter.default.post(name: .quietOpenDesktopClient, object: nil)
                 } label: {
                     Label(store.copy.openDesktopClient, systemImage: "macwindow")
+                }
+
+                Button {
+                    store.openMemoryFile()
+                } label: {
+                    Label(store.copy.editQuietRules, systemImage: "square.and.pencil")
                 }
 
                 Button {
@@ -2088,9 +2186,9 @@ struct QuietView: View {
             Capsule()
                 .stroke(isInputFocused ? quietChatText.opacity(0.18) : quietHairline, lineWidth: 0.8)
         }
-        .padding(.horizontal, 8)
+        .padding(.horizontal, 6)
         .padding(.top, 8)
-        .padding(.bottom, 8)
+        .padding(.bottom, 6)
         .background(Color(nsColor: blackholeWindowFill))
     }
 
@@ -2119,7 +2217,7 @@ struct FileDropTargetOverlay: View {
                 .foregroundStyle(quietNonUserMessageText)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(quietSelectedFill.opacity(0.74), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .background(quietSelectedFill.opacity(0.92), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(
@@ -2794,8 +2892,6 @@ struct SettingsPanel: View {
             ScrollViewReader { proxy in
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(alignment: .leading, spacing: 12) {
-                        rulesSection(copy: copy)
-
                         SettingsPickerField(title: copy.language, selection: $language, options: QuietLanguage.allCases.map { (value: $0.rawValue, label: $0.label) })
                             .onChange(of: language) { _, nextLanguage in
                                 store.applyLanguage(QuietLanguage.normalized(nextLanguage))
@@ -2926,43 +3022,6 @@ struct SettingsPanel: View {
             .frame(height: 0.8)
             .padding(.top, 4)
             .padding(.bottom, 2)
-    }
-
-    private func rulesSection(copy: QuietCopy) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(copy.quietRules)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(quietSubtleText)
-
-            Button {
-                store.openMemoryFile()
-            } label: {
-                HStack(spacing: 8) {
-                    LucideIcon(id: "file-pen-line", fallbackSystemName: "square.and.pencil")
-                        .frame(width: 14, height: 14)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(copy.editQuietRules)
-                            .font(.system(size: 12, weight: .semibold))
-                        Text(copy.quietRulesHelp)
-                            .font(.system(size: 10.5))
-                            .foregroundStyle(quietSubtleText)
-                    }
-                    Spacer()
-                    LucideIcon(id: "external-link", fallbackSystemName: "arrow.up.right")
-                        .frame(width: 13, height: 13)
-                        .foregroundStyle(quietSubtleText)
-                }
-                .foregroundStyle(quietChatText)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .background(quietSettingsControlFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .stroke(quietSettingsControlBorder, lineWidth: 0.6)
-                }
-            }
-            .buttonStyle(.plain)
-        }
     }
 
     private func appearanceOptions(copy: QuietCopy) -> [(value: String, label: String)] {
@@ -3107,19 +3166,115 @@ struct SettingsPickerField: View {
     }
 }
 
-private struct ScrollOffsetPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 0
+private struct ChatScrollMetricsReader: NSViewRepresentable {
+    let onChange: (CGFloat, CGFloat, CGFloat) -> Void
 
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+    func makeNSView(context: Context) -> ChatScrollMetricsView {
+        let view = ChatScrollMetricsView()
+        view.onChange = onChange
+        return view
+    }
+
+    func updateNSView(_ nsView: ChatScrollMetricsView, context: Context) {
+        nsView.onChange = onChange
+        DispatchQueue.main.async {
+            nsView.attachToScrollViewIfNeeded()
+            nsView.reportMetrics()
+        }
     }
 }
 
-private struct ScrollContentHeightPreferenceKey: PreferenceKey {
-    static let defaultValue: CGFloat = 1
+private final class ChatScrollMetricsView: NSView {
+    var onChange: ((CGFloat, CGFloat, CGFloat) -> Void)?
 
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
+    private weak var scrollView: NSScrollView?
+    private var boundsObserver: NotificationObserver?
+    private var contentFrameObserver: NotificationObserver?
+    private var clipFrameObserver: NotificationObserver?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        DispatchQueue.main.async { [weak self] in
+            self?.attachToScrollViewIfNeeded()
+            self?.reportMetrics()
+        }
+    }
+
+    deinit {
+        [boundsObserver, contentFrameObserver, clipFrameObserver].forEach { observer in
+            if let observer {
+                NotificationCenter.default.removeObserver(observer.token)
+            }
+        }
+    }
+
+    func attachToScrollViewIfNeeded() {
+        guard scrollView == nil else { return }
+        guard let scrollView = nearestScrollView() else { return }
+
+        self.scrollView = scrollView
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        scrollView.contentView.postsFrameChangedNotifications = true
+        scrollView.documentView?.postsFrameChangedNotifications = true
+
+        boundsObserver = NotificationObserver(NotificationCenter.default.addObserver(
+            forName: NSView.boundsDidChangeNotification,
+            object: scrollView.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.reportMetrics()
+            }
+        })
+
+        clipFrameObserver = NotificationObserver(NotificationCenter.default.addObserver(
+            forName: NSView.frameDidChangeNotification,
+            object: scrollView.contentView,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.reportMetrics()
+            }
+        })
+
+        if let documentView = scrollView.documentView {
+            contentFrameObserver = NotificationObserver(NotificationCenter.default.addObserver(
+                forName: NSView.frameDidChangeNotification,
+                object: documentView,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in
+                    self?.reportMetrics()
+                }
+            })
+        }
+    }
+
+    func reportMetrics() {
+        guard let scrollView else { return }
+        let offset = max(0, scrollView.contentView.bounds.origin.y)
+        let viewportHeight = max(1, scrollView.contentView.bounds.height)
+        let contentHeight = max(1, scrollView.documentView?.frame.height ?? scrollView.contentSize.height)
+        onChange?(offset, viewportHeight, contentHeight)
+    }
+
+    private func nearestScrollView() -> NSScrollView? {
+        var view: NSView? = self
+        while let current = view {
+            if let scrollView = current as? NSScrollView {
+                return scrollView
+            }
+            view = current.superview
+        }
+        return nil
+    }
+}
+
+private final class NotificationObserver: @unchecked Sendable {
+    let token: NSObjectProtocol
+
+    init(_ token: NSObjectProtocol) {
+        self.token = token
     }
 }
 
@@ -3251,9 +3406,6 @@ struct MessageBubble: View {
             }
 
             MessageContentView(message: message)
-                .font(.system(size: 12.5))
-                .lineSpacing(3)
-                .foregroundStyle(foreground)
                 .textSelection(.enabled)
                 .padding(.horizontal, 11)
                 .padding(.vertical, 8)
@@ -3328,6 +3480,9 @@ struct MessageContentView: View {
             AssistantMarkdownView(text: message.text.isEmpty ? "..." : message.text)
         } else {
             Text(message.text.isEmpty ? "..." : message.text)
+                .font(.system(size: 12.5))
+                .lineSpacing(3)
+                .foregroundStyle(message.role == .user ? quietPrimaryText : quietNonUserMessageText)
         }
     }
 }
@@ -3631,13 +3786,6 @@ struct ToolPayloadLine: View {
 }
 
 private extension NSView {
-    func enclosingTextView() -> NSTextView? {
-        if let textView = self as? NSTextView {
-            return textView
-        }
-        return superview?.enclosingTextView()
-    }
-
     func clearTextSelectionsRecursively(excluding excludedTextView: NSTextView? = nil) {
         if let textView = self as? NSTextView {
             guard textView !== excludedTextView else { return }
@@ -3653,13 +3801,6 @@ private extension NSView {
 final class QuietWindow: NSWindow {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
-
-    override func sendEvent(_ event: NSEvent) {
-        if event.type == .leftMouseDown {
-            clearTextSelectionsForMouseDown(event)
-        }
-        super.sendEvent(event)
-    }
 
     override func resignKey() {
         super.resignKey()
@@ -3681,22 +3822,6 @@ final class QuietWindow: NSWindow {
             }
             self.makeFirstResponder(nil)
             self.contentView?.clearTextSelectionsRecursively()
-        }
-    }
-
-    private func clearTextSelectionsForMouseDown(_ event: NSEvent) {
-        guard event.window === self,
-              let contentView else {
-            return
-        }
-
-        let location = contentView.convert(event.locationInWindow, from: nil)
-        let hitView = contentView.hitTest(location)
-        let targetTextView = hitView?.enclosingTextView()
-        contentView.clearTextSelectionsRecursively(excluding: targetTextView)
-
-        if targetTextView == nil {
-            makeFirstResponder(nil)
         }
     }
 }
@@ -3782,7 +3907,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.backgroundColor = .clear
         window.hasShadow = true
         window.invalidateShadow()
-        window.level = .normal
+        window.level = .popUpMenu
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.isMovableByWindowBackground = false
         window.minSize = quietWindowMinimumSize
@@ -3877,7 +4002,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.toolTip = quietCopy(.en).statusTooltip
             button.target = self
             button.action = #selector(toggleWindowFromStatusItem)
-            button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+            button.sendAction(on: [.leftMouseDown, .rightMouseUp])
         }
         self.statusItem = statusItem
     }
@@ -3926,15 +4051,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func toggleWindowVisibility() {
         guard let window else { return }
 
-        if window.isVisible {
+        if window.isVisible, window.isKeyWindow, NSApp.isActive {
             window.orderOut(nil)
             return
         }
 
+        presentMenuBarWindow(window)
+    }
+
+    private func presentMenuBarWindow(_ window: NSWindow) {
         configureWindowForMenuBarIfNeeded()
         positionWindowUnderStatusItem(window)
+        window.level = .popUpMenu
+        window.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
+        alignDesktopTrafficLights()
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window = self.window else { return }
+            self.positionWindowUnderStatusItem(window)
+            window.level = .popUpMenu
+            window.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            self.alignDesktopTrafficLights()
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
             NotificationCenter.default.post(name: .quietFocusComposer, object: nil)
         }
@@ -3944,6 +4085,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         guard let window else { return }
 
         configureWindowForDesktopIfNeeded()
+        window.level = .normal
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         alignDesktopTrafficLights()
@@ -3963,6 +4105,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         frameKeeper?.frameStorageKey = Self.menuBarWindowFrameKey
         NSApp.setActivationPolicy(.accessory)
         window.styleMask = [.borderless, .fullSizeContentView, .resizable]
+        window.level = .popUpMenu
         window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary, .ignoresCycle]
         window.isMovableByWindowBackground = false
         window.titleVisibility = .hidden
@@ -3992,6 +4135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         applyApplicationIcon()
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.level = .normal
         window.collectionBehavior = [.fullScreenPrimary]
         window.isMovableByWindowBackground = true
         window.title = quietAppName

@@ -23,7 +23,7 @@
 
 Blackhole is a tiny menu-bar app for macOS that tidies files, links, snippets, and saved references so you don't have to.
 
-You drag files and folders onto its icon, or paste links and text directly into the window. Blackhole figures out what they are, captures them into an inbox, and moves everything to a clean, organized folder on your own Mac. No account, no Blackhole-hosted cloud, and no telemetry.
+You drag files and folders onto its icon, or paste links and text directly into the window. Blackhole figures out what they are, stages them locally, and moves everything to a clean, subject-organized folder on your own Mac. No account, no Blackhole-hosted cloud, and no telemetry.
 
 It's like a smart `~/Documents` that absorbs loose resources and sorts itself from the menu bar.
 
@@ -34,7 +34,7 @@ It's like a smart `~/Documents` that absorbs loose resources and sorts itself fr
 | Problem | Blackhole's answer |
 | --- | --- |
 | Downloads folder is a graveyard | Drag it in. Blackhole sorts by type, date, or your own rules. |
-| Links and copied notes scatter across apps | Paste them in. Blackhole captures each item as an inbox resource. |
+| Links and copied notes scatter across apps | Paste them in. Blackhole captures each item as a local resource. |
 | Screenshots pile up on your desktop | Drop them anytime. Blackhole files them without you opening Finder. |
 | You have an organizing system in your head | Tell Blackhole once. It remembers and keeps doing it. |
 | "AI organizers" want your files in the cloud | Blackhole stores and organizes resources locally, under folders you control. |
@@ -46,11 +46,11 @@ It's like a smart `~/Documents` that absorbs loose resources and sorts itself fr
 You drop files, paste links, or paste snippets
               │
               ▼
-    Blackhole ingests them into ~/Documents/Blackhole/Inbox
+    Blackhole stages them in a hidden local folder
               │
               ▼
     The local agent inspects content, follows your rules,
-    and moves everything into ~/Documents/Blackhole/Files
+    and moves everything into ~/Documents/Blackhole/<subject>
               │
               ▼
     Done. Your resources are organized. You got a summary.
@@ -58,7 +58,7 @@ You drop files, paste links, or paste snippets
 
 1. **Drop or paste anything** — files, folders, screenshots, archives, URLs, notes, prompts, and copied references.
 2. **Blackhole understands them** — it reads filenames, saved link files, snippets, and content to decide where each resource belongs.
-3. **Everything lands in `~/Documents/Blackhole/Files`** — a single, clean home for organized resources that you control.
+3. **Everything lands in `~/Documents/Blackhole`** — resources are grouped directly by subject, such as receipts, personal identity information, legal documents, finance, health, and work.
 
 If you tell Blackhole "I like links sorted by research topic," it writes that rule to `~/.blackhole/memory.md`. From then on, it follows your preference automatically.
 
@@ -128,11 +128,11 @@ Blackhole reads `~/.blackhole/memory.md` for your resource-organizing preference
 ```markdown
 # Blackhole Memory
 
-## Folder Taxonomy
-- Images → Images/
-- Documents → Documents/
-- Screenshots → Screenshots/
-- Spreadsheets → Sheets/
+## Subject Taxonomy
+- 票据 → 票据/
+- 个人身份信息 → 个人身份信息/
+- 法务文件 → 法务文件/
+- 财务 → 财务/
 ```
 
 ## Under the Hood

@@ -4,6 +4,7 @@ import {
   existsSync,
   mkdirSync,
   cpSync,
+  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -21,9 +22,8 @@ const require = createRequire(import.meta.url);
 
 const quietHome = resolve(process.env.QUIET_HOME?.trim() || join(homedir(), ".blackhole"));
 const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || join(homedir(), "Documents", "Blackhole"));
-const inboxDir = join(quietContentHome, "Inbox");
-const filesDir = join(quietContentHome, "Files");
-const outputDir = join(quietContentHome, "Output");
+const stagingDir = join(quietContentHome, ".inbox");
+const filesDir = quietContentHome;
 const logDir = join(quietHome, "logs");
 const agentDir = join(quietHome, "pi-agent");
 const workspaceDir = join(quietHome, "workspace");
@@ -40,7 +40,7 @@ const copy = language === "zh"
       organizeInstruction: "你现在是 Blackhole 的 pi-coding-agent。请真实使用可用的 pi 工具理解并整理文件、链接、Snippet 和其他资源。",
       organizeDoneRule: "整理完成后，用中文简短总结你做了什么；不要提内部日志、manifest 或实现文件。",
       explainFallback: "请说明你会如何处理丢进 Blackhole 的文件、链接和文本片段。",
-      noInboxFiles: "没有资源进入 inbox",
+      noStagedResources: "没有资源进入暂存区",
       taskTitle: "agent 资源整理任务",
     }
   : {
@@ -49,13 +49,12 @@ const copy = language === "zh"
       organizeInstruction: "You are Blackhole's pi-coding-agent. Use the available pi tools to understand and organize files, links, snippets, and other resources.",
       organizeDoneRule: "When finished, briefly summarize what you moved and where in English; do not mention internal logs, manifests, or implementation files.",
       explainFallback: "Explain how you would handle files, links, and snippets dropped into Blackhole.",
-      noInboxFiles: "No resources entered the inbox",
+      noStagedResources: "No resources entered staging",
       taskTitle: "Agent resource organization task",
     };
 
-mkdirSync(inboxDir, { recursive: true });
+mkdirSync(stagingDir, { recursive: true });
 mkdirSync(filesDir, { recursive: true });
-mkdirSync(outputDir, { recursive: true });
 mkdirSync(logDir, { recursive: true });
 mkdirSync(agentDir, { recursive: true });
 mkdirSync(workspaceDir, { recursive: true });
@@ -72,24 +71,15 @@ These are user-editable resource organizing rules for Blackhole.
 - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
 
-## Resource Taxonomy
+## Subject Taxonomy
 
-- Images: png, jpg, jpeg, gif, webp, heic, tiff, svg, psd, ai, sketch, fig
-- Documents: pdf, doc, docx, txt, md, rtf, pages, epub
-- Sheets: xls, xlsx, csv, numbers
-- Slides: ppt, pptx, key
-- Archives: zip, rar, 7z, tar, gz, dmg, pkg
-- Code: js, jsx, ts, tsx, mjs, cjs, py, rb, go, rs, swift, java, kt, html, css, json, yaml, yml, toml, sh
-- Links: saved URLs and web references
-- Snippets: pasted text, notes, prompts, and copied references
-- Audio: mp3, wav, aac, flac, m4a
-- Video: mp4, mov, avi, mkv, webm
-- Folders: directories
-- Other: everything else
+- Organize by subject and purpose, not by file extension.
+- Prefer user-facing subjects such as \`票据\`, \`个人身份信息\`, \`法务文件\`, \`财务\`, \`医疗健康\`, \`工作\`, \`家庭\`, \`学习资料\`, \`旅行\`, \`照片\`, \`软件与安装包\`, and \`待确认\`.
+- Use a new subject folder when the resource clearly belongs to a subject that is not listed above.
 
 ## Destination Pattern
 
-\`QUIET_CONTENT_HOME/Files/<category>/<YYYY-MM>/<original-name>\`
+\`QUIET_CONTENT_HOME/<subject>/<original-name>\`
 
 ## Conversation Style
 
@@ -146,6 +136,7 @@ const toolIdsByProviderId = new Map();
 const toolIdsByContentIndex = new Map();
 const startedToolIds = new Set();
 let fallbackNoticeSent = false;
+let sessionListRefreshTimer;
 
 function emit(event) {
   process.stdout.write(`${JSON.stringify(event)}\n`);
@@ -171,6 +162,37 @@ function stringifyUnknown(value) {
 function isInside(parent, child) {
   const rel = relative(resolve(parent), resolve(child));
   return rel === "" || (!rel.startsWith("..") && !rel.startsWith(`${sep}`) && rel !== "..");
+}
+
+function removeEmptyDirectories(root, { includeRoot = false } = {}) {
+  if (!existsSync(root)) return false;
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return false;
+  }
+
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      removeEmptyDirectories(join(root, entry.name), { includeRoot: true });
+    }
+  }
+
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+    if (includeRoot && entries.length === 0) {
+      rmSync(root, { recursive: false, force: false });
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
+function cleanupStagingDirectories() {
+  removeEmptyDirectories(stagingDir);
 }
 
 function safeName(name) {
@@ -219,9 +241,9 @@ async function movePath(source, destination) {
   }
 }
 
-async function ingestToInbox(paths) {
+async function ingestToStaging(paths) {
   const batchId = new Date().toISOString().replace(/[:.]/g, "-");
-  const batchDir = join(inboxDir, batchId);
+  const batchDir = join(stagingDir, batchId);
   mkdirSync(batchDir, { recursive: true });
   const ingested = [];
   const failed = [];
@@ -239,7 +261,7 @@ async function ingestToInbox(paths) {
       await movePath(source, destination);
       ingested.push({
         originalSource: source,
-        inboxPath: destination,
+        stagingPath: destination,
         originalName: safeName(source.split(sep).at(-1)),
       });
     } catch (error) {
@@ -259,9 +281,9 @@ function resourceMarkdown(resource, capturedAt) {
   return `# Snippet\n\n- Captured: ${capturedAt}\n\n## Content\n\n\`\`\`text\n${value}\n\`\`\`\n`;
 }
 
-async function ingestResourcesToInbox(resources) {
+async function ingestResourcesToStaging(resources) {
   const batchId = new Date().toISOString().replace(/[:.]/g, "-");
-  const batchDir = join(inboxDir, batchId);
+  const batchDir = join(stagingDir, batchId);
   mkdirSync(batchDir, { recursive: true });
   const capturedAt = new Date().toISOString();
   const ingested = [];
@@ -279,7 +301,7 @@ async function ingestResourcesToInbox(resources) {
       writeFileSync(destination, resourceMarkdown({ kind, value }, capturedAt), "utf8");
       ingested.push({
         originalSource: kind,
-        inboxPath: destination,
+        stagingPath: destination,
         originalName: safeName(kind === "link" ? `Link: ${value}` : `Snippet: ${value.slice(0, 60)}`),
       });
     } catch (error) {
@@ -418,7 +440,10 @@ async function createPiSession({ fresh = false, sessionPath } = {}) {
   });
 
   session.setAutoCompactionEnabled?.(true);
-  session.subscribe(translateAgentEvent);
+  session.subscribe((event) => translateAgentEvent(event, {
+    sessionPath: session.sessionFile,
+    sessionId: session.sessionId,
+  }));
   currentSession = session;
   emit({ type: "session_current", path: session.sessionFile, id: session.sessionId });
   if (modelFallbackMessage) {
@@ -505,6 +530,18 @@ async function emitSessionList() {
     currentPath: currentSession?.sessionFile,
     sessions: await listSessions(),
   });
+}
+
+function scheduleSessionListRefresh(delayMs = 0) {
+  if (sessionListRefreshTimer) {
+    clearTimeout(sessionListRefreshTimer);
+  }
+  sessionListRefreshTimer = setTimeout(() => {
+    sessionListRefreshTimer = undefined;
+    void emitSessionList().catch((error) => {
+      emit({ type: "error", message: error?.message ?? String(error) });
+    });
+  }, delayMs);
 }
 
 async function openSession(sessionPath) {
@@ -594,19 +631,20 @@ async function deleteSession(sessionPath) {
   }
 }
 
-function translateAgentEvent(event) {
+function translateAgentEvent(event, sessionContext = {}) {
   const timestamp = new Date().toISOString();
+  const emitSessionEvent = (payload) => emit({ ...payload, ...sessionContext });
 
   if (event.type === "agent_start") {
-    emit({ type: "status", value: "agent 工作中", timestamp });
+    emitSessionEvent({ type: "status", value: "agent 工作中", timestamp });
     return;
   }
   if (event.type === "turn_start") {
-    emit({ type: "status", value: "agent 工作中", timestamp });
+    emitSessionEvent({ type: "status", value: "agent 工作中", timestamp });
     return;
   }
   if (event.type === "agent_end") {
-    emit({ type: "status", value: "agent 工作完成", timestamp });
+    emitSessionEvent({ type: "status", value: "agent 工作完成", timestamp });
     currentAssistantId = "";
     currentThinkingId = "";
     currentAssistantMessageId = "";
@@ -628,7 +666,7 @@ function translateAgentEvent(event) {
     const id = displayToolId(event.toolCallId);
     if (event.toolCallId) toolIdsByProviderId.set(event.toolCallId, id);
     if (startedToolIds.has(id)) {
-      emit({
+      emitSessionEvent({
         type: "tool_update",
         id,
         name: event.toolName || "tool",
@@ -638,7 +676,7 @@ function translateAgentEvent(event) {
       });
     } else {
       startedToolIds.add(id);
-      emit({
+      emitSessionEvent({
         type: "tool_start",
         id,
         name: event.toolName || "tool",
@@ -649,7 +687,7 @@ function translateAgentEvent(event) {
     return;
   }
   if (event.type === "tool_execution_update") {
-    emit({
+    emitSessionEvent({
       type: "tool_update",
       id: displayToolId(event.toolCallId),
       name: event.toolName || "tool",
@@ -660,7 +698,7 @@ function translateAgentEvent(event) {
   }
   if (event.type === "tool_execution_end") {
     const id = displayToolId(event.toolCallId);
-    emit({
+    emitSessionEvent({
       type: "tool_end",
       id,
       name: event.toolName || "tool",
@@ -668,6 +706,12 @@ function translateAgentEvent(event) {
       isError: Boolean(event.isError),
       timestamp,
     });
+    return;
+  }
+  if (event.type === "message_end") {
+    if (event.message?.role === "assistant") {
+      scheduleSessionListRefresh();
+    }
     return;
   }
   if (event.type !== "message_update") return;
@@ -687,7 +731,7 @@ function translateAgentEvent(event) {
       const name = typeof part.name === "string" ? part.name : "tool";
       if (!startedToolIds.has(id)) {
         startedToolIds.add(id);
-        emit({
+        emitSessionEvent({
           type: "tool_start",
           id,
           name,
@@ -696,7 +740,7 @@ function translateAgentEvent(event) {
         });
         return;
       }
-      emit({
+      emitSessionEvent({
         type: "tool_update",
         id,
         name,
@@ -709,32 +753,32 @@ function translateAgentEvent(event) {
 
   if (messageEvent.type === "text_start") {
     currentAssistantId = randomUUID();
-    emit({ type: "assistant_start", id: currentAssistantId, timestamp });
+    emitSessionEvent({ type: "assistant_start", id: currentAssistantId, timestamp });
     return;
   }
   if (messageEvent.type === "text_delta") {
     currentAssistantId ||= randomUUID();
-    emit({ type: "assistant_delta", id: currentAssistantId, text: messageEvent.delta || "", timestamp });
+    emitSessionEvent({ type: "assistant_delta", id: currentAssistantId, text: messageEvent.delta || "", timestamp });
     return;
   }
   if (messageEvent.type === "text_end") {
     currentAssistantId ||= randomUUID();
-    emit({ type: "assistant_done", id: currentAssistantId, timestamp });
+    emitSessionEvent({ type: "assistant_done", id: currentAssistantId, timestamp });
     currentAssistantId = "";
     return;
   }
   if (messageEvent.type === "thinking_start") {
     currentThinkingId = randomUUID();
-    emit({ type: "thinking_start", id: currentThinkingId, timestamp });
+    emitSessionEvent({ type: "thinking_start", id: currentThinkingId, timestamp });
     return;
   }
   if (messageEvent.type === "thinking_delta") {
     currentThinkingId ||= randomUUID();
-    emit({ type: "thinking_delta", id: currentThinkingId, text: messageEvent.delta || "", timestamp });
+    emitSessionEvent({ type: "thinking_delta", id: currentThinkingId, text: messageEvent.delta || "", timestamp });
     return;
   }
   if (messageEvent.type === "thinking_end") {
-    emit({ type: "thinking_end", id: currentThinkingId, text: messageEvent.content || "", timestamp });
+    emitSessionEvent({ type: "thinking_end", id: currentThinkingId, text: messageEvent.content || "", timestamp });
     currentThinkingId = "";
   }
 }
@@ -762,21 +806,25 @@ function buildOrganizePrompt(paths, userText) {
   const resourceList = paths.map(shortStat);
   const rules = language === "zh"
     ? `硬性规则：
-1. 只处理本次列出的 inbox 资源：${inboxDir}
+1. 只处理本次列出的隐藏暂存资源：${stagingDir}
 2. 请按 ~/.blackhole/memory.md 的规则理解用户的偏好并整理。
-3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后 inbox 源路径不应继续存在。
-4. 整理后的文件只能放到 files：${filesDir}
-5. 新建摘要、索引、报告或说明文档只能写到 output：${outputDir}
-6. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
-7. ${copy.organizeDoneRule}`
+3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后暂存源路径不应继续存在。
+4. 整理后的文件只能放到 Blackhole 根目录：${filesDir}
+5. 默认按 subject/用途建立一级文件夹，例如：票据、个人身份信息、法务文件、财务、医疗健康、工作、家庭、学习资料、旅行、照片、软件与安装包、待确认。
+6. 目标路径使用 ${filesDir}/<subject>/<original-name>；不要创建额外的系统目录。
+7. 不要新建摘要、索引、报告或说明文档；如需说明，只在对用户的最终回复里简短总结。
+8. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
+9. ${copy.organizeDoneRule}`
     : `Hard rules:
-1. Only process the inbox resources listed in this task: ${inboxDir}
+1. Only process the hidden staging resources listed in this task: ${stagingDir}
 2. Follow ~/.blackhole/memory.md to understand the user's preferences and organize accordingly.
-3. Move with mv; do not copy or delete user files or resources. After a successful move, the inbox source path should no longer exist.
-4. Organized files must stay under files: ${filesDir}
-5. Write new summaries, indexes, reports, or notes only under output: ${outputDir}
-6. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
-7. ${copy.organizeDoneRule}`;
+3. Move with mv; do not copy or delete user files or resources. After a successful move, the staging source path should no longer exist.
+4. Organized files must stay directly under the Blackhole root: ${filesDir}
+5. By default, create first-level folders by subject/purpose, for example: Receipts, Personal Identity, Legal Documents, Finance, Health, Work, Family, Study Materials, Travel, Photos, Software and Installers, Needs Review.
+6. Use ${filesDir}/<subject>/<original-name> as the destination pattern. Do not create extra system folders.
+7. Do not create summaries, indexes, reports, or notes as files. Summarize only in the final user-facing reply.
+8. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
+9. ${copy.organizeDoneRule}`;
   const pendingLabel = language === "zh" ? "待整理资源" : "Resources to organize";
   return `
 ${userText || copy.organizeFallback}
@@ -787,9 +835,7 @@ ${rules}
 
 Blackhole dirs:
 - content root: ${quietContentHome}
-- inbox: ${inboxDir}
-- files: ${filesDir}
-- output: ${outputDir}
+- hidden staging: ${stagingDir}
 
 ${pendingLabel}:
 ${JSON.stringify(resourceList, null, 2)}
@@ -809,39 +855,44 @@ async function handleUserMessage(message) {
     : [];
 
   if (paths.length > 0 || resources.length > 0) {
-    emit({ type: "status", value: `正在移入 inbox：${paths.length + resources.length} 项` });
+    emit({ type: "status", value: `正在移入隐藏暂存区：${paths.length + resources.length} 项` });
     const fileIngestion = paths.length > 0
-      ? await ingestToInbox(paths)
+      ? await ingestToStaging(paths)
       : { ingested: [], failed: [] };
     const resourceIngestion = resources.length > 0
-      ? await ingestResourcesToInbox(resources)
+      ? await ingestResourcesToStaging(resources)
       : { ingested: [], failed: [] };
     const ingested = [...fileIngestion.ingested, ...resourceIngestion.ingested];
     const failed = [...fileIngestion.failed, ...resourceIngestion.failed];
     if (failed.length > 0) {
       emit({
         type: "error",
-        message: `有 ${failed.length} 项未能进入 inbox：${failed[0].reason}`,
+        message: `有 ${failed.length} 项未能进入隐藏暂存区：${failed[0].reason}`,
       });
     }
     if (ingested.length === 0) {
-      emit({ type: "status", value: copy.noInboxFiles });
+      emit({ type: "status", value: copy.noStagedResources });
+      cleanupStagingDirectories();
       return;
     }
-    const inboxPaths = ingested.map((item) => item.inboxPath);
+    const stagingPaths = ingested.map((item) => item.stagingPath);
     emit({ type: "status", value: "agent 工作中" });
     emit({
       type: "plan",
       title: copy.taskTitle,
-      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/Inbox -> ~/Documents/Blackhole/Files`),
+      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/<subject>`),
     });
     const session = await getPiSession();
-    await session.prompt(buildOrganizePrompt(inboxPaths, text), { source: "interactive" });
+    try {
+      await session.prompt(buildOrganizePrompt(stagingPaths, text), { source: "interactive" });
+    } finally {
+      cleanupStagingDirectories();
+    }
     return;
   }
 
   const session = await getPiSession();
-  await session.prompt(text || `${copy.explainFallback} inbox=${inboxDir} files=${filesDir} output=${outputDir}.`, {
+  await session.prompt(text || `${copy.explainFallback} Blackhole root=${filesDir}.`, {
     source: "interactive",
   });
 }
@@ -852,8 +903,7 @@ emit({
   protocol: "blackhole-pi-jsonl-v1",
   app: "blackhole",
   filesRoot: filesDir,
-  inbox: inboxDir,
-  output: outputDir,
+  staging: stagingDir,
 });
 
 void getPiSession().catch((error) => {

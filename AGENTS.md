@@ -21,13 +21,13 @@ Treat the SwiftPM `QuietMenuBar` target as the active app. Build output under `.
 
 - App name: `Quiet`.
 - Runtime data root: `~/.quiet`.
-- User-visible content root: `~/Documents/Quiet`.
-- Dragged files first go to `~/Documents/Quiet/Inbox/<batch-id>`.
-- The pi agent organizes files into `~/Documents/Quiet/Files`.
-- Future generated content should go to `~/Documents/Quiet/Output`.
-- Undo logs go to `~/.quiet/undo`.
+- User-visible content root: `~/Documents/Blackhole`.
+- Dragged files first go to hidden staging under `~/Documents/Blackhole/.inbox/<batch-id>`.
+- The pi agent organizes files directly under `~/Documents/Blackhole` by subject, for example `票据`, `个人身份信息`, `法务文件`, `财务`, and `医疗健康`.
+- Keep generated or explanatory content in chat unless the user explicitly asks for files.
+- Undo logs go to `~/.blackhole/undo`.
 
-Do not move user files outside `~/Documents/Quiet/Files` unless the user explicitly asks for a different policy.
+Do not move user files outside `~/Documents/Blackhole` unless the user explicitly asks for a different policy.
 
 ## Agent Backend
 
@@ -92,6 +92,8 @@ node --check Sources/QuietMenuBar/Resources/pi-agent/server.mjs
 ./scripts/package-quiet-app.sh
 open dist/Quiet.app
 ```
+
+After each code change, stop any previously running development/preview instance of Quiet, then start a fresh preview with `swift run quiet` so the user is always looking at the latest build. For this status-bar app, do not treat a short-lived background launch, `nohup swift run quiet`, or direct `.build/.../quiet` execution as a successful preview unless you verify the app process is still alive and the status-bar icon is visible. Do not launch the packaged `.app` for ordinary development previews, and do not leave stale dev processes running in the background.
 
 If testing packaging, remember the packaged app launches its embedded Node from:
 
