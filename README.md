@@ -46,11 +46,11 @@ It's like a smart `~/Documents` that absorbs loose resources and sorts itself fr
 You drop files, paste links, or paste snippets
               │
               ▼
-    Blackhole places them in 00.01 Inbox for Blackhole
+    Blackhole places them in 00.01 Inbox for the system
               │
               ▼
     The local agent inspects content, follows your rules,
-    and moves everything into ~/Documents/Blackhole/<numbered-area>/<topic>
+    and moves everything into ~/Documents/Blackhole/<area>/<category>/<AC.ID>
               │
               ▼
     Done. Your resources are organized. You got a summary.
@@ -58,7 +58,7 @@ You drop files, paste links, or paste snippets
 
 1. **Drop or paste anything** — files, folders, screenshots, archives, URLs, notes, prompts, and copied references.
 2. **Blackhole understands them** — it reads filenames, saved link files, snippets, and content to decide where each resource belongs.
-3. **Everything lands in `~/Documents/Blackhole`** — resources use a Johnny.Decimal numbered structure with `00-09 System management/00 System management/00.01 Inbox for Blackhole` and stable areas such as `20-29 Money 财务` or `30-39 Work 工作`.
+3. **Everything lands in `~/Documents/Blackhole`** — resources use a Johnny.Decimal numbered structure with `00-09 System-management area/00 System-management category/00.01 Inbox for the system`, 10 categories per area, and standard-zero ID folders in each category.
 
 If you tell Blackhole "I like links sorted by research topic," it writes that rule to `~/.blackhole/memory.md`. From then on, it follows your preference automatically.
 
@@ -129,10 +129,9 @@ Blackhole reads `~/.blackhole/memory.md` for your resource-organizing preference
 # Blackhole Memory
 
 ## Johnny.Decimal System
-- New drops enter 00-09 System management/00 System management/00.01 Inbox for Blackhole.
-- Low-confidence or user-confirmation-needed resources stay in 00.01 Inbox for Blackhole.
-- System-management archive material goes to 00.09 Archive for Blackhole.
-- Money resources go under 20-29 Money 财务.
+- New drops enter 00-09 System-management area/00 System-management category/00.01 Inbox for the system.
+- Prefer a proper AC.ID; otherwise use the most specific .01 Inbox.
+- Every area has 10 categories, and every category has .00 JDex, .01 Inbox, .02 Task & project management, .03 Templates, .04 Links, and .09 Archive.
 ```
 
 ## Under the Hood

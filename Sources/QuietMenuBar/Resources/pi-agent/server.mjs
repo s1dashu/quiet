@@ -22,14 +22,14 @@ const require = createRequire(import.meta.url);
 
 const quietHome = resolve(process.env.QUIET_HOME?.trim() || join(homedir(), ".blackhole"));
 const quietContentHome = resolve(process.env.QUIET_CONTENT_HOME?.trim() || join(homedir(), "Documents", "Blackhole"));
-const systemAreaDir = join(quietContentHome, "00-09 System management");
-const systemManagementDir = join(systemAreaDir, "00 System management");
-const indexDir = join(systemManagementDir, "00.00 Index for Blackhole");
-const inboxDir = join(systemManagementDir, "00.01 Inbox for Blackhole");
-const taskProjectDir = join(systemManagementDir, "00.02 Task & project management for Blackhole");
-const templatesDir = join(systemManagementDir, "00.03 Templates for Blackhole");
-const somedayDir = join(systemManagementDir, "00.08 Someday for Blackhole");
-const archiveDir = join(systemManagementDir, "00.09 Archive for Blackhole");
+const systemAreaDir = join(quietContentHome, "00-09 System-management area");
+const systemManagementDir = join(systemAreaDir, "00 System-management category");
+const indexDir = join(systemManagementDir, "00.00 JDex for the system");
+const inboxDir = join(systemManagementDir, "00.01 Inbox for the system");
+const taskProjectDir = join(systemManagementDir, "00.02 Task & project management for the system");
+const templatesDir = join(systemManagementDir, "00.03 Templates for the system");
+const linksDir = join(systemManagementDir, "00.04 Links for the system");
+const archiveDir = join(systemManagementDir, "00.09 Archive for the system");
 const filesDir = quietContentHome;
 const logDir = join(quietHome, "logs");
 const agentDir = join(quietHome, "pi-agent");
@@ -40,6 +40,98 @@ const promptPath = new URL("./quiet-prompt.md", import.meta.url);
 const language = process.env.QUIET_LANGUAGE?.trim() === "zh" ? "zh" : "en";
 const initialSessionMessageLimit = 20;
 const sessionHistoryBatchSize = 10;
+const areaCategorySpecs = [
+  {
+    area: "10-19 Personal 个人",
+    categories: [
+      "10 Management of area 10-19",
+      "11 Identity & personal records 身份与个人记录",
+      "12 Health 医疗健康",
+      "13 Family & household 家庭与家务",
+      "14 Education & learning 教育学习",
+      "15 Travel & immigration 旅行与出入境",
+      "16 Personal correspondence 个人通信",
+      "17 Hobbies & interests 兴趣爱好",
+      "18 Someday personal 个人将来事项",
+      "19 Personal archive 个人归档",
+    ],
+  },
+  {
+    area: "20-29 Money 财务",
+    categories: [
+      "20 Management of area 20-29",
+      "21 Accounts & banking 账户与银行",
+      "22 Bills & invoices 账单与发票",
+      "23 Expenses & reimbursements 支出与报销",
+      "24 Tax 税务",
+      "25 Payroll & income 薪资与收入",
+      "26 Budgets & planning 预算与计划",
+      "27 Investments 投资",
+      "28 Accounting & statements 会计与报表",
+      "29 Money archive 财务归档",
+    ],
+  },
+  {
+    area: "30-39 Work 工作",
+    categories: [
+      "30 Management of area 30-39",
+      "31 Projects 项目",
+      "32 Meetings 会议",
+      "33 Vendors & partners 供应商与合作方",
+      "34 Reports & analysis 报告与分析",
+      "35 Operations & processes 运营与流程",
+      "36 Product & research 产品与研究",
+      "37 People & HR 人员与人事",
+      "38 Someday work 工作将来事项",
+      "39 Work archive 工作归档",
+    ],
+  },
+  {
+    area: "40-49 Legal & Admin 法务行政",
+    categories: [
+      "40 Management of area 40-49",
+      "41 Contracts 合同",
+      "42 Government & compliance 政务与合规",
+      "43 Insurance 保险",
+      "44 Certificates & licenses 证明与证照",
+      "45 Legal cases & disputes 案件与争议",
+      "46 Company admin 公司行政",
+      "47 Policies & procedures 制度与流程",
+      "48 Someday legal admin 法务行政将来事项",
+      "49 Legal admin archive 法务行政归档",
+    ],
+  },
+  {
+    area: "50-59 Assets & Property 资产",
+    categories: [
+      "50 Management of area 50-59",
+      "51 Real estate 房产",
+      "52 Vehicles 车辆",
+      "53 Devices & equipment 设备",
+      "54 Warranties & manuals 保修与手册",
+      "55 Inventory & valuables 库存与贵重物品",
+      "56 Maintenance & repairs 维护与维修",
+      "57 Purchases & receipts 采购与票据",
+      "58 Someday assets 资产将来事项",
+      "59 Assets archive 资产归档",
+    ],
+  },
+  {
+    area: "90-99 Archive 归档",
+    categories: [
+      "90 Management of area 90-99",
+      "91 Personal archive 个人归档",
+      "92 Money archive 财务归档",
+      "93 Work archive 工作归档",
+      "94 Legal admin archive 法务行政归档",
+      "95 Assets archive 资产归档",
+      "96 Old projects 旧项目",
+      "97 Backups 备份",
+      "98 Historical reference 历史参考",
+      "99 General archive 总归档",
+    ],
+  },
+];
 const copy = language === "zh"
   ? {
       startupFailed: "agent 启动失败，请检查模型 API Key 或 node_modules",
@@ -60,6 +152,15 @@ const copy = language === "zh"
       taskTitle: "Agent resource organization task",
     };
 
+function categoryMapText() {
+  return areaCategorySpecs
+    .map((spec) => [
+      `- \`${spec.area}\``,
+      ...spec.categories.map((category) => `  - \`${category}\``),
+    ].join("\n"))
+    .join("\n");
+}
+
 mkdirSync(filesDir, { recursive: true });
 mkdirSync(logDir, { recursive: true });
 mkdirSync(agentDir, { recursive: true });
@@ -73,33 +174,47 @@ function ensureQuietDecimalStructure() {
     inboxDir,
     taskProjectDir,
     templatesDir,
-    somedayDir,
+    linksDir,
     archiveDir,
-    join(quietContentHome, "10-19 Personal 个人"),
-    join(quietContentHome, "20-29 Money 财务"),
-    join(quietContentHome, "30-39 Work 工作"),
-    join(quietContentHome, "40-49 Legal & Admin 法务行政"),
-    join(quietContentHome, "50-59 Assets & Property 资产"),
-    join(quietContentHome, "90-99 Archive 归档"),
+    ...areaCategorySpecs.flatMap((spec) => [
+      join(quietContentHome, spec.area),
+      ...spec.categories.flatMap((category) => {
+        const categoryNumber = category.slice(0, 2);
+        const categoryDir = join(quietContentHome, spec.area, category);
+        const scope = categoryNumber.endsWith("0")
+          ? `area ${categoryNumber[0]}0-${categoryNumber[0]}9`
+          : `category ${categoryNumber}`;
+        return [
+          categoryDir,
+          join(categoryDir, `${categoryNumber}.00 JDex for ${scope}`),
+          join(categoryDir, `${categoryNumber}.01 Inbox for ${scope}`),
+          join(categoryDir, `${categoryNumber}.02 Task & project management for ${scope}`),
+          join(categoryDir, `${categoryNumber}.03 Templates for ${scope}`),
+          join(categoryDir, `${categoryNumber}.04 Links for ${scope}`),
+          join(categoryDir, `${categoryNumber}.09 Archive for ${scope}`),
+        ];
+      }),
+    ]),
   ];
   for (const dir of dirs) {
     mkdirSync(dir, { recursive: true });
   }
+  migrateLegacyTopLevelDirectories();
 
-  const indexPath = join(indexDir, "00.00 Index for Blackhole.md");
+  const indexPath = join(indexDir, "00.00 JDex for the system.md");
   if (!existsSync(indexPath)) {
-    writeFileSync(indexPath, `# 00.00 Index for Blackhole
+    writeFileSync(indexPath, `# 00.00 JDex for the system
 
-Blackhole uses a Johnny.Decimal system. The index is the catalogue for the system: create or update index entries before creating new IDs elsewhere.
+Blackhole uses a Johnny.Decimal system. The JDex is the master record for the system's IDs: create or update JDex entries before creating new IDs elsewhere.
 
-## 00-09 System management
+## 00-09 System-management area
 
-- 00.00 Index for Blackhole
-- 00.01 Inbox for Blackhole
-- 00.02 Task & project management for Blackhole
-- 00.03 Templates for Blackhole
-- 00.08 Someday for Blackhole
-- 00.09 Archive for Blackhole
+- 00.00 JDex for the system
+- 00.01 Inbox for the system
+- 00.02 Task & project management for the system
+- 00.03 Templates for the system
+- 00.04 Links for the system
+- 00.09 Archive for the system
 
 ## Default Areas
 
@@ -111,6 +226,34 @@ Blackhole uses a Johnny.Decimal system. The index is the catalogue for the syste
 - 90-99 Archive 归档
 `, "utf8");
   }
+}
+
+function migrateLegacyTopLevelDirectories() {
+  const migrations = [
+    ["00 Inbox 待整理", inboxDir],
+    ["01 Needs Review 需确认", inboxDir],
+    ["09 System Archive 系统归档", archiveDir],
+    [".inbox", inboxDir],
+    ["00-09 System management/00 System management/00.00 Index for Blackhole", indexDir],
+    ["00-09 System management/00 System management/00.01 Inbox for Blackhole", inboxDir],
+    ["00-09 System management/00 System management/00.02 Task & project management for Blackhole", taskProjectDir],
+    ["00-09 System management/00 System management/00.03 Templates for Blackhole", templatesDir],
+    ["00-09 System management/00 System management/00.08 Someday for Blackhole", archiveDir],
+    ["00-09 System management/00 System management/00.09 Archive for Blackhole", archiveDir],
+  ];
+  for (const [legacyName, destinationDir] of migrations) {
+    const legacyDir = join(quietContentHome, legacyName);
+    if (!existsSync(legacyDir) || !statSync(legacyDir).isDirectory()) continue;
+    mkdirSync(destinationDir, { recursive: true });
+    for (const entry of readdirSync(legacyDir, { withFileTypes: true })) {
+      const source = join(legacyDir, entry.name);
+      const destination = uniqueDestination(destinationDir, safeName(entry.name));
+      cpSync(source, destination, { recursive: true, preserveTimestamps: true, force: false, errorOnExist: true });
+      rmSync(source, { recursive: true, force: false });
+    }
+    rmSync(legacyDir, { recursive: true, force: true });
+  }
+  rmSync(join(quietContentHome, "00-09 System management"), { recursive: true, force: true });
 }
 
 ensureQuietDecimalStructure();
@@ -130,28 +273,23 @@ These are user-editable resource organizing rules for Blackhole.
 ## Johnny.Decimal System
 
 - Use Blackhole's Johnny.Decimal structure directly.
-- New drops enter \`00-09 System management/00 System management/00.01 Inbox for Blackhole\`.
-- The index lives in \`00-09 System management/00 System management/00.00 Index for Blackhole\`.
-- In-progress or unfiled resources stay in \`00.01 Inbox for Blackhole\`.
-- Tasks and project-management material belongs in \`00.02 Task & project management for Blackhole\`.
-- Templates belong in \`00.03 Templates for Blackhole\`.
-- Someday material belongs in \`00.08 Someday for Blackhole\`.
-- Completed or inactive system-management material belongs in \`00.09 Archive for Blackhole\`.
+- New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
+- The JDex lives in \`00-09 System-management area/00 System-management category/00.00 JDex for the system\`.
+- In-progress or unfiled resources stay in the most specific \`.01 Inbox\`.
+- Tasks and project-management material belongs in the most specific \`.02 Task & project management\`.
+- Templates belong in the most specific \`.03 Templates\`.
+- Links belong in the most specific \`.04 Links\`.
+- Completed or inactive material that should not be organised belongs in the most specific \`.09 Archive\`.
 - Prefer existing numbered areas over creating new top-level folders.
-- User resources that are old/completed belong in \`90-99 Archive 归档\`; system-management archive material belongs in \`00.09 Archive for Blackhole\`.
+- Do not create or use \`.05\`, \`.06\`, \`.07\`, or \`.08\`; these are reserved.
 
-## Default Numbered Areas
+## Default Areas and Categories
 
-- \`10-19 Personal 个人\`: identity, health, family, education, travel.
-- \`20-29 Money 财务\`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
-- \`30-39 Work 工作\`: meetings, projects, vendors, reports, operations.
-- \`40-49 Legal & Admin 法务行政\`: legal documents, government forms, insurance, certificates.
-- \`50-59 Assets & Property 资产\`: real estate, vehicles, devices, warranties.
-- \`90-99 Archive 归档\`: old, completed, or inactive user resources.
+${categoryMapText()}
 
 ## Destination Pattern
 
-\`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>\`
+\`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>\`
 
 ## Conversation Style
 
@@ -174,28 +312,23 @@ const johnnyDecimalMemoryGuidance = `
 ## Johnny.Decimal System
 
 - Use Blackhole's Johnny.Decimal structure directly.
-- New drops enter \`00-09 System management/00 System management/00.01 Inbox for Blackhole\`.
-- The index lives in \`00-09 System management/00 System management/00.00 Index for Blackhole\`.
-- In-progress or unfiled resources stay in \`00.01 Inbox for Blackhole\`.
-- Tasks and project-management material belongs in \`00.02 Task & project management for Blackhole\`.
-- Templates belong in \`00.03 Templates for Blackhole\`.
-- Someday material belongs in \`00.08 Someday for Blackhole\`.
-- Completed or inactive system-management material belongs in \`00.09 Archive for Blackhole\`.
+- New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
+- The JDex lives in \`00-09 System-management area/00 System-management category/00.00 JDex for the system\`.
+- In-progress or unfiled resources stay in the most specific \`.01 Inbox\`.
+- Tasks and project-management material belongs in the most specific \`.02 Task & project management\`.
+- Templates belong in the most specific \`.03 Templates\`.
+- Links belong in the most specific \`.04 Links\`.
+- Completed or inactive material that should not be organised belongs in the most specific \`.09 Archive\`.
 - Prefer existing numbered areas over creating new top-level folders.
-- User resources that are old/completed belong in \`90-99 Archive 归档\`; system-management archive material belongs in \`00.09 Archive for Blackhole\`.
+- Do not create or use \`.05\`, \`.06\`, \`.07\`, or \`.08\`; these are reserved.
 
-## Default Numbered Areas
+## Default Areas and Categories
 
-- \`10-19 Personal 个人\`: identity, health, family, education, travel.
-- \`20-29 Money 财务\`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
-- \`30-39 Work 工作\`: meetings, projects, vendors, reports, operations.
-- \`40-49 Legal & Admin 法务行政\`: legal documents, government forms, insurance, certificates.
-- \`50-59 Assets & Property 资产\`: real estate, vehicles, devices, warranties.
-- \`90-99 Archive 归档\`: old, completed, or inactive user resources.
+${categoryMapText()}
 
 ## Destination Pattern
 
-\`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>\`
+\`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>\`
 `.trim();
 
 function migrateMemoryText(memory) {
@@ -216,7 +349,23 @@ function migrateMemoryText(memory) {
     }
   }
 
-  next = next.replace(/`QUIET_CONTENT_HOME\/<subject>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`");
+  const currentJohnnyPattern = /\n## Johnny\.Decimal System\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
+  if (
+    currentJohnnyPattern.test(next)
+    && (
+      !next.includes("## Default Areas and Categories")
+      || next.includes("Inbox for Blackhole")
+      || next.includes("Index for Blackhole")
+      || next.includes("Someday material belongs")
+      || next.includes("00-09 System management/00 System management")
+    )
+  ) {
+    next = next.replace(currentJohnnyPattern, `\n${johnnyDecimalMemoryGuidance}\n`);
+  }
+
+  next = next
+    .replace(/`QUIET_CONTENT_HOME\/<subject>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`")
+    .replace(/`QUIET_CONTENT_HOME\/<numbered-area>\/<numbered-category-or-topic>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`");
   return `${next.trim()}\n`;
 }
 
@@ -981,11 +1130,11 @@ function buildOrganizePrompt(paths, userText) {
 3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后 00.01 Inbox 源路径不应继续存在，除非它仍处于未归档状态。
 4. 整理后的文件只能放到 Blackhole 根目录：${filesDir}
 5. 默认直接使用 Johnny.Decimal 编号结构；优先放进已有编号区域，不要回到旧的纯 subject 一级目录。
-6. 系统管理区是 ${systemManagementDir}，包含 00.00 Index、00.01 Inbox、00.02 Task & project management、00.03 Templates、00.08 Someday、00.09 Archive。
-7. 常用用户资源区域：10-19 Personal 个人、20-29 Money 财务、30-39 Work 工作、40-49 Legal & Admin 法务行政、50-59 Assets & Property 资产、90-99 Archive 归档。
-8. 低置信度、敏感冲突、重复冲突、文件名与内容矛盾、或需要用户确认的资源，保留在 ${inboxDir} 并在最终回复里说明。
-9. Blackhole 生成的批次归档记录放在 ${archiveDir}；原始用户资源不要放进系统管理区，除非它们仍在 00.01 Inbox 等待处理。旧的已完成用户资源应放入 90-99 Archive 归档。
-10. 目标路径使用 ${filesDir}/<numbered-area>/<numbered-category-or-topic>/<original-name>。
+6. 系统管理区是 ${systemManagementDir}，包含 00.00 JDex、00.01 Inbox、00.02 Task & project management、00.03 Templates、00.04 Links、00.09 Archive。
+7. 每个 area 下都有 10 个 category；每个 category 下都有官方 standard-zero ID：AC.00、AC.01、AC.02、AC.03、AC.04、AC.09。不要创建或使用 AC.05-AC.08。
+8. 优先放入最具体的 proper ID；如果无法确定 proper ID，但能确定 category，则放入该 category 的 AC.01 Inbox；如果只能确定 area，则放入 A0.01 Inbox；完全无法判断才放入 00.01 Inbox。
+9. Blackhole 生成的批次归档记录放在 ${archiveDir}；原始用户资源不要放进系统管理区，除非它们仍在 00.01 Inbox 等待处理。
+10. 目标路径使用 ${filesDir}/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>。
 11. 不要新建摘要、索引、报告或说明文档；如需说明，只在对用户的最终回复里简短总结。
 12. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
 13. ${copy.organizeDoneRule}`
@@ -995,11 +1144,11 @@ function buildOrganizePrompt(paths, userText) {
 3. Move with mv; do not copy or delete user files or resources. After a successful move, the 00.01 Inbox source path should no longer exist unless it remains unfiled or needs confirmation.
 4. Organized files must stay directly under the Blackhole root: ${filesDir}
 5. Use the Johnny.Decimal numbered structure directly. Prefer existing numbered areas; do not fall back to old plain subject top-level folders.
-6. The system-management category is ${systemManagementDir}: 00.00 Index, 00.01 Inbox, 00.02 Task & project management, 00.03 Templates, 00.08 Someday, 00.09 Archive.
-7. Common user-resource areas: 10-19 Personal, 20-29 Money, 30-39 Work, 40-49 Legal & Admin, 50-59 Assets & Property, 90-99 Archive.
-8. Leave low-confidence, sensitive/conflicting, duplicate-conflicting, filename/content mismatch, or user-confirmation-needed resources in ${inboxDir} and mention them in the final reply.
-9. Blackhole-created batch archive records go in ${archiveDir}. Do not put original user resources in system management unless they are still waiting in 00.01 Inbox. Old/completed user resources belong in 90-99 Archive.
-10. Use ${filesDir}/<numbered-area>/<numbered-category-or-topic>/<original-name> as the destination pattern.
+6. The system-management category is ${systemManagementDir}: 00.00 JDex, 00.01 Inbox, 00.02 Task & project management, 00.03 Templates, 00.04 Links, 00.09 Archive.
+7. Every area has 10 categories; every category has the official standard-zero IDs: AC.00, AC.01, AC.02, AC.03, AC.04, AC.09. Do not create or use AC.05-AC.08.
+8. Prefer the most specific proper ID. If you cannot identify a proper ID but can identify the category, use that category's AC.01 Inbox. If you can only identify the area, use A0.01 Inbox. Use 00.01 Inbox only when the area is unknown.
+9. Blackhole-created batch archive records go in ${archiveDir}. Do not put original user resources in system management unless they are still waiting in 00.01 Inbox.
+10. Use ${filesDir}/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name> as the destination pattern.
 11. Do not create summaries, indexes, reports, or notes as files. Summarize only in the final user-facing reply.
 12. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
 13. ${copy.organizeDoneRule}`;
@@ -1013,7 +1162,7 @@ ${rules}
 
 Blackhole dirs:
 - content root: ${quietContentHome}
-- 00.00 Index: ${indexDir}
+- 00.00 JDex: ${indexDir}
 - 00.01 Inbox: ${inboxDir}
 - 00.09 Archive: ${archiveDir}
 
@@ -1062,7 +1211,7 @@ async function handleUserMessage(message) {
     emit({
       type: "plan",
       title: copy.taskTitle,
-      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/<numbered-area>`),
+      items: ingested.map((item) => `${item.originalName} -> ~/Documents/Blackhole/<area>/<category>/<AC.ID>`),
     });
     const session = await getPiSession();
     try {

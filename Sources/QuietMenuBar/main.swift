@@ -1374,25 +1374,126 @@ final class AgentStore: ObservableObject {
         return url
     }
 
+    private func johnnyDecimalAreaCategorySpecs() -> [(area: String, categories: [String])] {
+        [
+            ("10-19 Personal 个人", [
+                "10 Management of area 10-19",
+                "11 Identity & personal records 身份与个人记录",
+                "12 Health 医疗健康",
+                "13 Family & household 家庭与家务",
+                "14 Education & learning 教育学习",
+                "15 Travel & immigration 旅行与出入境",
+                "16 Personal correspondence 个人通信",
+                "17 Hobbies & interests 兴趣爱好",
+                "18 Someday personal 个人将来事项",
+                "19 Personal archive 个人归档",
+            ]),
+            ("20-29 Money 财务", [
+                "20 Management of area 20-29",
+                "21 Accounts & banking 账户与银行",
+                "22 Bills & invoices 账单与发票",
+                "23 Expenses & reimbursements 支出与报销",
+                "24 Tax 税务",
+                "25 Payroll & income 薪资与收入",
+                "26 Budgets & planning 预算与计划",
+                "27 Investments 投资",
+                "28 Accounting & statements 会计与报表",
+                "29 Money archive 财务归档",
+            ]),
+            ("30-39 Work 工作", [
+                "30 Management of area 30-39",
+                "31 Projects 项目",
+                "32 Meetings 会议",
+                "33 Vendors & partners 供应商与合作方",
+                "34 Reports & analysis 报告与分析",
+                "35 Operations & processes 运营与流程",
+                "36 Product & research 产品与研究",
+                "37 People & HR 人员与人事",
+                "38 Someday work 工作将来事项",
+                "39 Work archive 工作归档",
+            ]),
+            ("40-49 Legal & Admin 法务行政", [
+                "40 Management of area 40-49",
+                "41 Contracts 合同",
+                "42 Government & compliance 政务与合规",
+                "43 Insurance 保险",
+                "44 Certificates & licenses 证明与证照",
+                "45 Legal cases & disputes 案件与争议",
+                "46 Company admin 公司行政",
+                "47 Policies & procedures 制度与流程",
+                "48 Someday legal admin 法务行政将来事项",
+                "49 Legal admin archive 法务行政归档",
+            ]),
+            ("50-59 Assets & Property 资产", [
+                "50 Management of area 50-59",
+                "51 Real estate 房产",
+                "52 Vehicles 车辆",
+                "53 Devices & equipment 设备",
+                "54 Warranties & manuals 保修与手册",
+                "55 Inventory & valuables 库存与贵重物品",
+                "56 Maintenance & repairs 维护与维修",
+                "57 Purchases & receipts 采购与票据",
+                "58 Someday assets 资产将来事项",
+                "59 Assets archive 资产归档",
+            ]),
+            ("90-99 Archive 归档", [
+                "90 Management of area 90-99",
+                "91 Personal archive 个人归档",
+                "92 Money archive 财务归档",
+                "93 Work archive 工作归档",
+                "94 Legal admin archive 法务行政归档",
+                "95 Assets archive 资产归档",
+                "96 Old projects 旧项目",
+                "97 Backups 备份",
+                "98 Historical reference 历史参考",
+                "99 General archive 总归档",
+            ]),
+        ]
+    }
+
+    private func johnnyDecimalDirectories() -> [String] {
+        var dirs = [
+            "00-09 System-management area/00 System-management category/00.00 JDex for the system",
+            "00-09 System-management area/00 System-management category/00.01 Inbox for the system",
+            "00-09 System-management area/00 System-management category/00.02 Task & project management for the system",
+            "00-09 System-management area/00 System-management category/00.03 Templates for the system",
+            "00-09 System-management area/00 System-management category/00.04 Links for the system",
+            "00-09 System-management area/00 System-management category/00.09 Archive for the system",
+        ]
+        for spec in johnnyDecimalAreaCategorySpecs() {
+            dirs.append(spec.area)
+            for category in spec.categories {
+                let categoryNumber = String(category.prefix(2))
+                let scope = categoryNumber.hasSuffix("0")
+                    ? "area \(categoryNumber.prefix(1))0-\(categoryNumber.prefix(1))9"
+                    : "category \(categoryNumber)"
+                let categoryPath = "\(spec.area)/\(category)"
+                dirs.append(categoryPath)
+                dirs.append("\(categoryPath)/\(categoryNumber).00 JDex for \(scope)")
+                dirs.append("\(categoryPath)/\(categoryNumber).01 Inbox for \(scope)")
+                dirs.append("\(categoryPath)/\(categoryNumber).02 Task & project management for \(scope)")
+                dirs.append("\(categoryPath)/\(categoryNumber).03 Templates for \(scope)")
+                dirs.append("\(categoryPath)/\(categoryNumber).04 Links for \(scope)")
+                dirs.append("\(categoryPath)/\(categoryNumber).09 Archive for \(scope)")
+            }
+        }
+        return dirs
+    }
+
+    private func johnnyDecimalCategoryMap() -> String {
+        johnnyDecimalAreaCategorySpecs()
+            .map { spec in
+                ([ "- `\(spec.area)`" ] + spec.categories.map { "  - `\($0)`" }).joined(separator: "\n")
+            }
+            .joined(separator: "\n")
+    }
+
     private func contentDirectory() -> URL {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
             ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Documents", isDirectory: true)
         let url = documents.appendingPathComponent("Blackhole", isDirectory: true)
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        [
-            "00-09 System management/00 System management/00.00 Index for Blackhole",
-            "00-09 System management/00 System management/00.01 Inbox for Blackhole",
-            "00-09 System management/00 System management/00.02 Task & project management for Blackhole",
-            "00-09 System management/00 System management/00.03 Templates for Blackhole",
-            "00-09 System management/00 System management/00.08 Someday for Blackhole",
-            "00-09 System management/00 System management/00.09 Archive for Blackhole",
-            "10-19 Personal 个人",
-            "20-29 Money 财务",
-            "30-39 Work 工作",
-            "40-49 Legal & Admin 法务行政",
-            "50-59 Assets & Property 资产",
-            "90-99 Archive 归档",
-        ].forEach { name in
+        johnnyDecimalDirectories().forEach { name in
             try? FileManager.default.createDirectory(at: url.appendingPathComponent(name, isDirectory: true), withIntermediateDirectories: true)
         }
         return url
@@ -1433,28 +1534,23 @@ final class AgentStore: ObservableObject {
             ## Johnny.Decimal System
 
             - Use Blackhole's Johnny.Decimal structure directly.
-            - New drops enter `00-09 System management/00 System management/00.01 Inbox for Blackhole`.
-            - The index lives in `00-09 System management/00 System management/00.00 Index for Blackhole`.
-            - In-progress or unfiled resources stay in `00.01 Inbox for Blackhole`.
-            - Tasks and project-management material belongs in `00.02 Task & project management for Blackhole`.
-            - Templates belong in `00.03 Templates for Blackhole`.
-            - Someday material belongs in `00.08 Someday for Blackhole`.
-            - Completed or inactive system-management material belongs in `00.09 Archive for Blackhole`.
+            - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
+            - The JDex lives in `00-09 System-management area/00 System-management category/00.00 JDex for the system`.
+            - In-progress or unfiled resources stay in the most specific `.01 Inbox`.
+            - Tasks and project-management material belongs in the most specific `.02 Task & project management`.
+            - Templates belong in the most specific `.03 Templates`.
+            - Links belong in the most specific `.04 Links`.
+            - Completed or inactive material that should not be organised belongs in the most specific `.09 Archive`.
             - Prefer existing numbered areas over creating new top-level folders.
-            - User resources that are old/completed belong in `90-99 Archive 归档`; system-management archive material belongs in `00.09 Archive for Blackhole`.
+            - Do not create or use `.05`, `.06`, `.07`, or `.08`; these are reserved.
 
-            ## Default Numbered Areas
+            ## Default Areas and Categories
 
-            - `10-19 Personal 个人`: identity, health, family, education, travel.
-            - `20-29 Money 财务`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
-            - `30-39 Work 工作`: meetings, projects, vendors, reports, operations.
-            - `40-49 Legal & Admin 法务行政`: legal documents, government forms, insurance, certificates.
-            - `50-59 Assets & Property 资产`: real estate, vehicles, devices, warranties.
-            - `90-99 Archive 归档`: old, completed, or inactive user resources.
+            \(johnnyDecimalCategoryMap())
 
             ## Destination Pattern
 
-            `QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`
+            `QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`
 
             ## Conversation Style
 
@@ -1479,28 +1575,23 @@ final class AgentStore: ObservableObject {
             ## Johnny.Decimal System
 
             - Use Blackhole's Johnny.Decimal structure directly.
-            - New drops enter `00-09 System management/00 System management/00.01 Inbox for Blackhole`.
-            - The index lives in `00-09 System management/00 System management/00.00 Index for Blackhole`.
-            - In-progress or unfiled resources stay in `00.01 Inbox for Blackhole`.
-            - Tasks and project-management material belongs in `00.02 Task & project management for Blackhole`.
-            - Templates belong in `00.03 Templates for Blackhole`.
-            - Someday material belongs in `00.08 Someday for Blackhole`.
-            - Completed or inactive system-management material belongs in `00.09 Archive for Blackhole`.
+            - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
+            - The JDex lives in `00-09 System-management area/00 System-management category/00.00 JDex for the system`.
+            - In-progress or unfiled resources stay in the most specific `.01 Inbox`.
+            - Tasks and project-management material belongs in the most specific `.02 Task & project management`.
+            - Templates belong in the most specific `.03 Templates`.
+            - Links belong in the most specific `.04 Links`.
+            - Completed or inactive material that should not be organised belongs in the most specific `.09 Archive`.
             - Prefer existing numbered areas over creating new top-level folders.
-            - User resources that are old/completed belong in `90-99 Archive 归档`; system-management archive material belongs in `00.09 Archive for Blackhole`.
+            - Do not create or use `.05`, `.06`, `.07`, or `.08`; these are reserved.
 
-            ## Default Numbered Areas
+            ## Default Areas and Categories
 
-            - `10-19 Personal 个人`: identity, health, family, education, travel.
-            - `20-29 Money 财务`: banking, tax, reimbursements, payroll, invoices, budgets, investments, accounting.
-            - `30-39 Work 工作`: meetings, projects, vendors, reports, operations.
-            - `40-49 Legal & Admin 法务行政`: legal documents, government forms, insurance, certificates.
-            - `50-59 Assets & Property 资产`: real estate, vehicles, devices, warranties.
-            - `90-99 Archive 归档`: old, completed, or inactive user resources.
+            \(johnnyDecimalCategoryMap())
 
             ## Destination Pattern
 
-            `QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`
+            `QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`
             """
             var migrated = memory.trimmingCharacters(in: .whitespacesAndNewlines)
             if !migrated.contains("## Learning User Preferences") {
@@ -1511,9 +1602,21 @@ final class AgentStore: ObservableObject {
                 options: .regularExpression
             ) {
                 migrated.replaceSubrange(taxonomyRange, with: "\n" + johnnyDecimalGuidance + "\n")
-            } else if !migrated.contains("## Johnny.Decimal System") {
+            } else if !migrated.contains("## Johnny.Decimal System")
+                || !migrated.contains("## Default Areas and Categories")
+                || migrated.contains("Inbox for Blackhole")
+                || migrated.contains("Index for Blackhole")
+                || migrated.contains("Someday material belongs")
+                || migrated.contains("00-09 System management/00 System management") {
                 if let conversationRange = migrated.range(of: "\n## Conversation Style") {
-                    migrated.insert(contentsOf: "\n" + johnnyDecimalGuidance + "\n", at: conversationRange.lowerBound)
+                    if let currentRange = migrated.range(
+                        of: #"(?s)\n## Johnny\.Decimal System\n.*?(?=\n## Conversation Style|\n## Learning User Preferences|$)"#,
+                        options: .regularExpression
+                    ) {
+                        migrated.replaceSubrange(currentRange, with: "\n" + johnnyDecimalGuidance + "\n")
+                    } else {
+                        migrated.insert(contentsOf: "\n" + johnnyDecimalGuidance + "\n", at: conversationRange.lowerBound)
+                    }
                 } else {
                     migrated.append("\n")
                     migrated.append(johnnyDecimalGuidance)
@@ -1521,7 +1624,11 @@ final class AgentStore: ObservableObject {
             }
             migrated = migrated.replacingOccurrences(
                 of: "`QUIET_CONTENT_HOME/<subject>/<original-name>`",
-                with: "`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`"
+                with: "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`"
+            )
+            migrated = migrated.replacingOccurrences(
+                of: "`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`",
+                with: "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`"
             )
             if migrated.appending("\n") != memory {
                 try? migrated.appending("\n").write(to: url, atomically: true, encoding: .utf8)
