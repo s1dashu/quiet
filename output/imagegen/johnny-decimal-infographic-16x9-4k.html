@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <title>Johnny.Decimal 文件分类法 4K</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #eef2f7;
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", Arial, sans-serif;
+      color: #121826;
+    }
+    .canvas {
+      width: 3840px;
+      height: 2160px;
+      padding: 56px 72px 46px;
+      background:
+        linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
+      overflow: hidden;
+    }
+    .top {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      align-items: end;
+      gap: 40px;
+      padding-bottom: 30px;
+      border-bottom: 8px solid #174ea6;
+    }
+    h1 {
+      margin: 0;
+      font-size: 104px;
+      line-height: 1;
+      letter-spacing: 0;
+      font-weight: 850;
+    }
+    .subtitle {
+      font-size: 42px;
+      font-weight: 760;
+      color: #1f2937;
+      padding-bottom: 8px;
+      white-space: nowrap;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1.52fr 1fr;
+      gap: 28px;
+      height: 1890px;
+      padding-top: 28px;
+    }
+    .section {
+      border: 4px solid #174ea6;
+      border-radius: 18px;
+      background: rgba(255,255,255,.92);
+      overflow: hidden;
+    }
+    .section-title {
+      background: #174ea6;
+      color: #fff;
+      font-size: 44px;
+      line-height: 1.18;
+      font-weight: 820;
+      padding: 16px 26px 18px;
+    }
+    .left .body {
+      display: grid;
+      grid-template-columns: 1fr 1.08fr;
+      grid-template-rows: 500px 430px 1fr;
+      gap: 20px;
+      padding: 22px;
+      height: calc(100% - 90px);
+    }
+    .right .body {
+      display: grid;
+      grid-template-rows: 520px 370px 405px 1fr;
+      gap: 20px;
+      padding: 22px;
+      height: calc(100% - 90px);
+    }
+    .card {
+      border: 3px solid #c9d7ee;
+      border-radius: 14px;
+      background: #fff;
+      padding: 22px;
+      position: relative;
+      overflow: hidden;
+    }
+    .card h2 {
+      margin: 0 0 18px;
+      color: #0f3f8f;
+      font-size: 29px;
+      line-height: 1.18;
+      font-weight: 830;
+    }
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 48px;
+      height: 48px;
+      margin-right: 14px;
+      border-radius: 10px;
+      background: #174ea6;
+      color: #fff;
+      font-size: 30px;
+      font-weight: 850;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 20px;
+      line-height: 1.12;
+    }
+    th, td {
+      border: 2px solid #d1dbe9;
+      padding: 5px 8px;
+      vertical-align: top;
+    }
+    th {
+      background: #eaf1fb;
+      color: #103b7f;
+      font-weight: 800;
+    }
+    .num { color: #174ea6; font-weight: 830; white-space: nowrap; }
+    .green { color: #17823b; font-weight: 830; }
+    .amber { color: #bb6b00; font-weight: 830; }
+    .red { color: #c62828; font-weight: 830; }
+    .rules {
+      display: grid;
+      gap: 12px;
+      margin-top: 16px;
+      font-size: 23px;
+      line-height: 1.28;
+    }
+    .rules div {
+      padding-left: 34px;
+      position: relative;
+    }
+    .rules div::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #174ea6;
+      position: absolute;
+      left: 6px;
+      top: 12px;
+    }
+    .formula {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin: 8px 0 18px;
+      padding: 20px 24px;
+      border-radius: 14px;
+      background: #f0f8f2;
+      border: 3px solid #8fc59e;
+      font-size: 40px;
+      font-weight: 860;
+    }
+    .formula .dot { color: #17823b; }
+    .id-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      font-size: 23px;
+    }
+    .codebox {
+      background: #f8fafc;
+      border: 2px solid #d8e2ef;
+      border-radius: 12px;
+      padding: 14px 18px;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 23px;
+      line-height: 1.32;
+      white-space: pre;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      align-items: stretch;
+      margin-top: 8px;
+    }
+    .step {
+      min-height: 124px;
+      border: 3px solid #b9c9e4;
+      background: #f8fbff;
+      border-radius: 16px;
+      padding: 18px 14px;
+      text-align: center;
+      font-size: 25px;
+      font-weight: 760;
+      line-height: 1.22;
+      position: relative;
+    }
+    .step:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -24px;
+      top: 44px;
+      color: #174ea6;
+      font-size: 46px;
+      font-weight: 900;
+      z-index: 2;
+    }
+    .decision-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 18px;
+      margin-top: 18px;
+    }
+    .mini {
+      border-radius: 14px;
+      padding: 16px 18px;
+      font-size: 25px;
+      line-height: 1.25;
+      border: 3px solid #d6e3f2;
+      background: #fff;
+    }
+    .mini.good { border-color: #8fc59e; background: #f4fbf5; }
+    .mini.warn { border-color: #f2be76; background: #fff9ed; }
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      font-size: 25px;
+      line-height: 1.24;
+    }
+    .compare .col {
+      border-radius: 14px;
+      padding: 16px 20px;
+      border: 3px solid;
+    }
+    .compare .good { border-color: #46a05a; background: #f1fbf4; }
+    .compare .bad { border-color: #d84b42; background: #fff4f3; }
+    .compare h3 {
+      margin: 0 0 12px;
+      font-size: 28px;
+    }
+    ul {
+      margin: 0;
+      padding-left: 30px;
+    }
+    li { margin: 8px 0; }
+    .tree {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 25px;
+      line-height: 1.24;
+      white-space: pre;
+      background: #f8fafc;
+      border: 2px solid #d8e2ef;
+      border-radius: 12px;
+      padding: 18px 22px;
+    }
+    .anatomy {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+    .big-id {
+      font-size: 60px;
+      font-weight: 880;
+      white-space: nowrap;
+    }
+    .callouts {
+      display: grid;
+      gap: 12px;
+      font-size: 22px;
+      line-height: 1.23;
+    }
+    .callout {
+      border: 3px solid #c9d7ee;
+      border-radius: 12px;
+      padding: 12px 16px;
+      background: #fff;
+    }
+    .zeros table { font-size: 18px; line-height: 1.1; }
+    .zeros th, .zeros td { padding: 5px 7px; }
+    .hard {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 18px;
+      font-size: 26px;
+      line-height: 1.25;
+    }
+    .hard .pill {
+      border: 3px solid #9bc9a6;
+      border-radius: 16px;
+      background: #f4fbf5;
+      padding: 18px;
+      min-height: 132px;
+    }
+    .circle {
+      display: inline-grid;
+      place-items: center;
+      width: 48px;
+      height: 48px;
+      border-radius: 999px;
+      background: #17823b;
+      color: #fff;
+      font-weight: 850;
+      margin-right: 10px;
+    }
+    .note {
+      grid-column: 1 / -1;
+      font-size: 28px;
+      border: 3px dashed #b8c6d8;
+      border-radius: 14px;
+      padding: 16px 20px;
+      background: #fbfdff;
+    }
+    .footer {
+      position: absolute;
+      left: 72px;
+      right: 72px;
+      bottom: 18px;
+      display: flex;
+      justify-content: space-between;
+      color: #4b5563;
+      font-size: 23px;
+    }
+  </style>
+</head>
+<body>
+  <main class="canvas">
+    <header class="top">
+      <h1>Johnny.Decimal 文件分类法</h1>
+      <div class="subtitle">先设计地图，再放文件：区域 Area → 分类 Category → ID 内容容器</div>
+    </header>
+
+    <section class="grid">
+      <div class="section left">
+        <div class="section-title">一、具体怎么分类（核心：区域 → 分类 → ID）</div>
+        <div class="body">
+          <div class="card">
+            <h2><span class="tag">A</span>1. 区域 Area：先分 10 个大柜子</h2>
+            <table>
+              <tr><th>区域号</th><th>区域名称（示例）</th><th>说明</th></tr>
+              <tr><td class="num">00-09</td><td>System</td><td>系统本身、JDex、模板</td></tr>
+              <tr><td class="num">10-19</td><td>Life admin</td><td>生活行政、个人与家庭事务</td></tr>
+              <tr><td class="num">20-29</td><td>Work</td><td>工作与业务、客户与项目</td></tr>
+              <tr><td class="num">30-39</td><td>Money</td><td>财务、合同、税务、保险</td></tr>
+              <tr><td class="num">40-49</td><td>Learning</td><td>学习、研究、知识管理</td></tr>
+              <tr><td class="num">50-59</td><td>Creative</td><td>创作、内容、素材与作品</td></tr>
+              <tr><td class="num">60-69</td><td>Health</td><td>健康、医疗、健身</td></tr>
+              <tr><td class="num">70-79</td><td>Community</td><td>社群、志愿、人际协作</td></tr>
+              <tr><td class="num">80-89</td><td>Leisure</td><td>休闲、兴趣、收藏</td></tr>
+              <tr><td class="num">90-99</td><td>Archive</td><td>长期归档、历史记录</td></tr>
+            </table>
+          </div>
+
+          <div class="card">
+            <h2><span class="tag">B</span>2. 分类 Category：每区最多 10 个抽屉</h2>
+            <table>
+              <tr><th colspan="2">示例：10-19 Life admin 的 10 个分类</th></tr>
+              <tr><td class="num">11 Me</td><td>个人身份、证件、简历、个人档案</td></tr>
+              <tr><td class="num">12 Home</td><td>住所、设备、家庭、家务与维修</td></tr>
+              <tr><td class="num">13 Money</td><td>银行、税务、保险、投资、合同</td></tr>
+              <tr><td class="num">14 Online</td><td>账号、订阅、域名、数字资产</td></tr>
+              <tr><td class="num">15 Travel</td><td>旅行、活动、娱乐、酒店、航班</td></tr>
+              <tr><td class="num">16 Health</td><td>医疗、体检、用药、健身、记录</td></tr>
+              <tr><td class="num">17 Transport</td><td>车辆、交通、驾照、保险、停车</td></tr>
+              <tr><td class="num">18 Relationships</td><td>家人、朋友、社群、礼物、通讯录</td></tr>
+              <tr><td class="num">19 Reference</td><td>长期参考、资料库、重要记录</td></tr>
+            </table>
+          </div>
+
+          <div class="card">
+            <h2><span class="tag">C</span>3. ID：真正存内容的文件夹</h2>
+            <div class="formula"><span class="num">AC</span><span class="dot">.</span><span class="green">ID</span><span style="font-size:29px">= 分类号 + 小数点 + 两位内容号</span></div>
+            <div class="id-grid">
+              <div class="codebox">15.22 Travel insurance
+15.41 All short trips
+15.52 Trip to NYC
+13.14 Tax returns
+14.03 Password manager export</div>
+              <div class="rules">
+                <div>ID 是具体对象 / 主题 / 事件。</div>
+                <div>一个 ID 可包含文件、邮件、笔记、实体物品引用。</div>
+                <div class="green">文件只放进 ID，不放进 Area 或 Category。</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2><span class="tag">D</span>4. 分类决策流程：放文件前的思考路径</h2>
+            <div class="flow">
+              <div class="step">这是什么<br>生活 / 工作范围？<br><span class="num">选 Area</span></div>
+              <div class="step">我会先去<br>哪里找它？<br><span class="num">选 Category</span></div>
+              <div class="step">已有合适<br>ID 吗？</div>
+              <div class="step">写入 JDex<br>再创建文件夹</div>
+            </div>
+            <div class="decision-row">
+              <div class="mini good"><span class="green">是：</span>放入已有 ID。保持所有实际内容都在 ID 文件夹里。</div>
+              <div class="mini warn"><span class="amber">否：</span>创建下一个可用 ID，例如 15.53。</div>
+              <div class="mini warn"><span class="amber">不确定：</span>先放 AC.01 Inbox，定期清空。</div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2><span class="tag">E</span>5. 好分类 vs 坏分类</h2>
+            <div class="compare">
+              <div class="col good">
+                <h3 class="green">好分类：稳定、可复用、能预测</h3>
+                <ul>
+                  <li>按领域：<b>15 Travel</b></li>
+                  <li>按稳定主题：<b>13 Money</b></li>
+                  <li>按可复用容器：<b>15.41 All short trips</b></li>
+                  <li>按具体事件：<b>15.52 Trip to NYC</b></li>
+                  <li>名称清晰，可长期使用、可扩展</li>
+                </ul>
+              </div>
+              <div class="col bad">
+                <h3 class="red">坏分类：临时、模糊、依赖情绪</h3>
+                <ul>
+                  <li>按情绪：杂七杂八、想到再放</li>
+                  <li>按工具：电脑里的东西、手机里的文件</li>
+                  <li>按紧急度：马上处理、待办、紧急</li>
+                  <li>无限嵌套：项目/资料/最终版/新版</li>
+                  <li>名称含糊：资料、重要、备份、其他</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="note">记住：Johnny.Decimal 的关键不是“给文件夹编号”，而是先建立稳定地图，再把每个文件放进一个明确的 ID 内容容器。</div>
+        </div>
+      </div>
+
+      <div class="section right">
+        <div class="section-title">二、结构、索引与长期维护</div>
+        <div class="body">
+          <div class="card">
+            <h2><span class="tag">F</span>文件结构示例（10-19 Life admin）</h2>
+            <div class="tree">10-19 Life admin
+├─ 13 Money
+│  ├─ 13.14 Tax returns
+│  └─ 13.31 Home insurance
+└─ 15 Travel
+   ├─ 15.01 Inbox for category 15
+   ├─ 15.22 Travel insurance
+   │  └─ 2024-08-08 NYC lost bag/
+   │     └─ Claim form.pdf
+   ├─ 15.41 All short trips
+   │  ├─ 2024-02-13 CBR-SYD Weekend in Sydney/
+   │  └─ 2026-01-07 Hotel in Cobar/
+   └─ 15.52 Trip to NYC</div>
+          </div>
+
+          <div class="card">
+            <h2><span class="tag">G</span>编号怎么读：以 15.52 Trip to NYC 为例</h2>
+            <div class="anatomy">
+              <div class="big-id"><span class="num">15</span><span class="green">.52</span> Trip to NYC</div>
+              <div class="callouts">
+                <div class="callout"><span class="num">1</span> → 10-19 区域组（Life admin）</div>
+                <div class="callout"><span class="num">15</span> → Travel 分类（旅行）</div>
+                <div class="callout"><span class="green">.52</span> → 第 52 个 ID（内容容器）</div>
+                <div class="callout">小数点前 = 结构；小数点后 = 内容编号</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="card zeros">
+            <h2><span class="tag">H</span>标准零位 Standard zeros：管理用桶</h2>
+            <table>
+              <tr><th>零位</th><th>名称</th><th>用途</th><th>使用层级</th></tr>
+              <tr><td class="num">AC.00</td><td>JDex / Index</td><td>记录 ID、位置、说明、关键词</td><td>系统 / 区域 / 分类</td></tr>
+              <tr><td class="num">AC.01</td><td>Inbox</td><td>临时收件箱，不确定归属时先放这里</td><td>系统 / 区域 / 分类</td></tr>
+              <tr><td class="num">AC.02</td><td>Task & project management</td><td>任务、项目、行动清单</td><td>系统 / 区域 / 分类</td></tr>
+              <tr><td class="num">AC.03</td><td>Templates</td><td>模板、表单、清单、可复用文档</td><td>系统 / 区域 / 分类</td></tr>
+              <tr><td class="num">AC.04</td><td>Links</td><td>链接、书签、参考资料、外部资源</td><td>系统 / 区域 / 分类</td></tr>
+              <tr><td class="num">AC.05-AC.08</td><td>Reserved</td><td>保留，不使用</td><td>—</td></tr>
+              <tr><td class="num">AC.09</td><td>Archive</td><td>归档：不再活跃但需保留的资料</td><td>系统 / 区域 / 分类</td></tr>
+            </table>
+            <div class="rules"><div class="amber">优先使用最具体的 zero：分类级 > 区域级 > 系统级。</div></div>
+          </div>
+
+          <div class="card">
+            <h2><span class="tag">I</span>三条硬规则：长期保持系统清晰</h2>
+            <div class="hard">
+              <div class="pill"><span class="circle">1</span><b>区域和分类只导航，不直接放文件</b><br>所有实际内容都必须装在 ID 文件夹里。</div>
+              <div class="pill"><span class="circle">2</span><b>ID 内最多一层子文件夹</b><br>日期用 yyyy-mm-dd，排在文件名最前。</div>
+              <div class="pill"><span class="circle">3</span><b>超过 10/10/100 时扩系统或重分区</b><br>保持简单、清晰、可维护。</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      <span>Source: johnnydecimal.com documentation</span>
+      <span>3840 × 2160 PNG export</span>
+    </footer>
+  </main>
+</body>
+</html>
