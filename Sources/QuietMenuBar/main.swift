@@ -2696,7 +2696,7 @@ struct EmptyConversationHint: View {
                 .frame(width: 22, height: 22)
                 .foregroundStyle(quietChatMutedText.opacity(0.72))
 
-            Text("使用 `Alt` + `Space` 快捷召唤 Quiet")
+            Text("使用 `Alt` + `Space` 快捷唤出 `Quiet`")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(quietChatMutedText.opacity(0.86))
                 .multilineTextAlignment(.center)
