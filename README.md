@@ -58,7 +58,7 @@ You drop files, paste links, or paste snippets
 
 1. **Drop or paste anything** — files, folders, screenshots, archives, URLs, notes, prompts, and copied references.
 2. **Quiet understands them** — it reads filenames, saved link files, snippets, and content to decide where each resource belongs.
-3. **Everything lands in `~/Documents/Quiet`** — resources use a Johnny.Decimal numbered structure with `00-09 System-management area/00 System-management category/00.01 Inbox for the system`, 10 categories per area, and standard-zero ID folders in each category.
+3. **Everything lands in `~/Documents/Quiet`** — new installs first ask whether you prefer PARA, Johnny.Decimal, or your own custom organizing method. Johnny.Decimal mode creates the numbered area/category skeleton and the system inbox, but it does not pre-create every category's standard-zero folders.
 
 If you tell Quiet "I like links sorted by research topic," it writes that rule to `~/.quiet/memory.md`. From then on, it follows your preference automatically.
 
@@ -128,11 +128,17 @@ Quiet reads `~/.quiet/memory.md` for your resource-organizing preferences. This 
 ```markdown
 # Quiet Memory
 
-## Default Method: Johnny.Decimal System
-- More information: https://johnnydecimal.com/
-- New drops enter 00-09 System-management area/00 System-management category/00.01 Inbox for the system.
-- Prefer a proper AC.ID; otherwise use the most specific .01 Inbox.
-- Every area has 10 categories, and every category has .00 JDex, .01 Inbox, .02 Task & project management, .03 Templates, .04 Links, and .09 Archive.
+## Method Initialization
+Status: uninitialized
+
+Quiet will ask whether you prefer PARA, Johnny.Decimal, or a custom method.
+
+## Candidate Method: PARA
+- Projects, Areas, Resources, Archives.
+
+## Candidate Method: Johnny.Decimal
+- Areas, categories, and specific AC.ID content folders.
+- Quiet does not automatically create AC.00/01/02/03/04/09 inside every category.
 ```
 
 ## Under the Hood

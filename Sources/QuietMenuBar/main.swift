@@ -238,12 +238,12 @@ private let quietMarkdownCodeFill = quietDynamicColor(
     dark: NSColor.black.withAlphaComponent(0.34)
 )
 private let quietWindowFill = quietDynamicNSColor(
-    light: NSColor.white,
-    dark: NSColor(calibratedWhite: 0.04, alpha: 1)
+    light: NSColor.white.withAlphaComponent(0.72),
+    dark: NSColor(calibratedWhite: 0.035, alpha: 0.48)
 )
 private let quietPanelFill = quietDynamicNSColor(
-    light: NSColor.white,
-    dark: NSColor(calibratedWhite: 0.075, alpha: 1)
+    light: NSColor.white.withAlphaComponent(0.82),
+    dark: NSColor(calibratedWhite: 0.075, alpha: 0.74)
 )
 private let quietSidebarFill = quietDynamicNSColor(
     light: NSColor(calibratedWhite: 0.88, alpha: 1),
@@ -1634,26 +1634,13 @@ final class AgentStore: ObservableObject {
         var dirs = [
             "00-09 System-management area/00 System-management category/00.00 JDex for the system",
             "00-09 System-management area/00 System-management category/00.01 Inbox for the system",
-            "00-09 System-management area/00 System-management category/00.02 Task & project management for the system",
-            "00-09 System-management area/00 System-management category/00.03 Templates for the system",
-            "00-09 System-management area/00 System-management category/00.04 Links for the system",
             "00-09 System-management area/00 System-management category/00.09 Archive for the system",
         ]
         for spec in johnnyDecimalAreaCategorySpecs() {
             dirs.append(spec.area)
             for category in spec.categories {
-                let categoryNumber = String(category.prefix(2))
-                let scope = categoryNumber.hasSuffix("0")
-                    ? "area \(categoryNumber.prefix(1))0-\(categoryNumber.prefix(1))9"
-                    : "category \(categoryNumber)"
                 let categoryPath = "\(spec.area)/\(category)"
                 dirs.append(categoryPath)
-                dirs.append("\(categoryPath)/\(categoryNumber).00 JDex for \(scope)")
-                dirs.append("\(categoryPath)/\(categoryNumber).01 Inbox for \(scope)")
-                dirs.append("\(categoryPath)/\(categoryNumber).02 Task & project management for \(scope)")
-                dirs.append("\(categoryPath)/\(categoryNumber).03 Templates for \(scope)")
-                dirs.append("\(categoryPath)/\(categoryNumber).04 Links for \(scope)")
-                dirs.append("\(categoryPath)/\(categoryNumber).09 Archive for \(scope)")
             }
         }
         return dirs
@@ -1694,11 +1681,25 @@ final class AgentStore: ObservableObject {
 
     func openMemoryFile() {
         let url = applicationSupportDirectory().appendingPathComponent("memory.md", isDirectory: false)
-        if !FileManager.default.fileExists(atPath: url.path) {
-            let defaultMemory = """
+        let defaultMemory = """
             # Quiet Memory
 
             These are user-editable resource organizing rules for Quiet.
+
+            ## Method Initialization
+
+            Status: uninitialized
+
+            Quiet has not chosen the user's final file organizing method yet.
+
+            - Until this status is changed, do not assume Johnny.Decimal, PARA, or any other final method.
+            - At the start of a chat or before organizing files, ask the user to choose one organizing preference:
+              1. PARA: best for most people; simple, action-oriented, and organized around Projects, Areas, Resources, and Archives.
+              2. Johnny.Decimal: best for highly structured users who want stable numeric addresses and do not mind maintaining a stricter system.
+              3. Custom: the user can describe their own preferred filing rules.
+            - After the user clearly chooses a method, edit this memory file immediately.
+            - When editing after a choice, remove this uninitialized onboarding section and remove all non-selected candidate methods. Keep only one final organizing method.
+            - The final method section must be titled exactly `## Final Organizing Method: PARA`, `## Final Organizing Method: Johnny.Decimal`, or `## Final Organizing Method: Custom`.
 
             ## Learning User Preferences
 
@@ -1707,22 +1708,32 @@ final class AgentStore: ObservableObject {
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
 
-            ## Default Method: Johnny.Decimal System
+            ## Candidate Method: PARA
 
-            This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+            Use this only if the user chooses PARA. PARA is a light, general-purpose method for most people.
+
+            - Organize by current usefulness and action context, not by a rigid taxonomy.
+            - Use four top-level folders: `1 Projects`, `2 Areas`, `3 Resources`, and `4 Archives`.
+            - Projects are active outcomes with a finish line.
+            - Areas are ongoing parts of the user's life/work that they maintain or revisit.
+            - Resources are reference material, community/third-party material, topics, learning, inspiration, and reusable knowledge.
+            - Archives are inactive projects, old areas, stale resources, and completed material.
+            - Prefer simple names and shallow nesting.
+
+            ## Candidate Method: Johnny.Decimal
+
+            Use this only if the user chooses Johnny.Decimal. Johnny.Decimal is stricter and fits users who want a stable numeric address system.
 
             More information: https://johnnydecimal.com/
 
-            These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
-
             - Use Quiet's Johnny.Decimal structure directly.
+            - Quiet pre-creates only the area/category skeleton plus the system-level `00.00 JDex`, `00.01 Inbox`, and `00.09 Archive`.
+            - Do not automatically create `AC.00`, `AC.01`, `AC.02`, `AC.03`, `AC.04`, or `AC.09` inside every category.
+            - Create specific `AC.ID` folders only when there is real content or the user asks.
             - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
             - The JDex lives in `00-09 System-management area/00 System-management category/00.00 JDex for the system`.
-            - In-progress or unfiled resources stay in the most specific `.01 Inbox`.
-            - Tasks and project-management material belongs in the most specific `.02 Task & project management`.
-            - Templates belong in the most specific `.03 Templates`.
-            - Links belong in the most specific `.04 Links`.
-            - Completed or inactive material that should not be organised belongs in the most specific `.09 Archive`.
+            - Prefer a specific content ID such as `15.52 Trip to NYC` over a category-level standard-zero folder.
+            - Use category-level Inbox/Archive/Tasks/Templates/Links only when the user explicitly wants that bucket for that category.
             - Prefer existing numbered areas over creating new top-level folders.
             - Do not create or use `.05`, `.06`, `.07`, or `.08`; these are reserved.
 
@@ -1730,9 +1741,17 @@ final class AgentStore: ObservableObject {
 
             \(johnnyDecimalCategoryMap())
 
-            ## Destination Pattern
+            ## Johnny.Decimal Destination Pattern
 
-            `QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`
+            `QUIET_CONTENT_HOME/<area>/<category>/<AC.ID specific-content-folder>/<original-name>`
+
+            ## Candidate Method: Custom
+
+            Use this only if the user describes a custom filing preference.
+
+            - Ask concise follow-up questions until the rules are concrete enough to organize files.
+            - Then rewrite this memory file so only the user's custom method remains.
+            - Preserve exact naming, grouping, and destination preferences the user gives.
 
             ## Conversation Style
 
@@ -1741,6 +1760,7 @@ final class AgentStore: ObservableObject {
             - When a problem occurs, name the failed file and continue with the rest.
             - Always respond in user's language.
             """
+        if !FileManager.default.fileExists(atPath: url.path) {
             try? defaultMemory.appending("\n").write(to: url, atomically: true, encoding: .utf8)
         } else if let memory = try? String(contentsOf: url, encoding: .utf8) {
             let preferenceGuidance = """
@@ -1752,75 +1772,97 @@ final class AgentStore: ObservableObject {
             - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
             - This file is located at `QUIET_HOME/memory.md`; you may edit it with bash when updating remembered organizing preferences.
             """
-            let johnnyDecimalGuidance = """
+            let methodOnboardingGuidance = """
 
-            ## Default Method: Johnny.Decimal System
+            ## Method Initialization
 
-            This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+            Status: uninitialized
 
-            More information: https://johnnydecimal.com/
+            Quiet has not chosen the user's final file organizing method yet.
 
-            These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
+            - Until this status is changed, do not assume Johnny.Decimal, PARA, or any other final method.
+            - At the start of a chat or before organizing files, ask the user to choose one organizing preference:
+              1. PARA: best for most people; simple, action-oriented, and organized around Projects, Areas, Resources, and Archives.
+              2. Johnny.Decimal: best for highly structured users who want stable numeric addresses and do not mind maintaining a stricter system.
+              3. Custom: the user can describe their own preferred filing rules.
+            - After the user clearly chooses a method, edit this memory file immediately.
+            - When editing after a choice, remove this uninitialized onboarding section and remove all non-selected candidate methods. Keep only one final organizing method.
+            - The final method section must be titled exactly `## Final Organizing Method: PARA`, `## Final Organizing Method: Johnny.Decimal`, or `## Final Organizing Method: Custom`.
+            """
+            let candidateMethodGuidance = """
 
-            - Use Quiet's Johnny.Decimal structure directly.
-            - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system`.
+            ## Candidate Method: PARA
+
+            Use this only if the user chooses PARA. PARA is a light, general-purpose method for most people.
+
+            - Use four top-level folders: `1 Projects`, `2 Areas`, `3 Resources`, and `4 Archives`.
+            - Projects are active outcomes with a finish line.
+            - Areas are ongoing parts of the user's life/work that they maintain or revisit.
+            - Resources are reference material, community/third-party material, topics, learning, inspiration, and reusable knowledge.
+            - Archives are inactive projects, old areas, stale resources, and completed material.
+
+            ## Candidate Method: Johnny.Decimal
+
+            Use this only if the user chooses Johnny.Decimal. Johnny.Decimal is stricter and fits users who want a stable numeric address system.
+
+            - Use Quiet's Johnny.Decimal area/category structure directly.
+            - Quiet pre-creates only the area/category skeleton plus the system-level `00.00 JDex`, `00.01 Inbox`, and `00.09 Archive`.
+            - Do not automatically create `AC.00`, `AC.01`, `AC.02`, `AC.03`, `AC.04`, or `AC.09` inside every category.
+            - Create specific `AC.ID` folders only when there is real content or the user asks.
+            - New drops enter `00-09 System-management area/00 System-management category/00.01 Inbox for the system` until organized.
             - The JDex lives in `00-09 System-management area/00 System-management category/00.00 JDex for the system`.
-            - In-progress or unfiled resources stay in the most specific `.01 Inbox`.
-            - Tasks and project-management material belongs in the most specific `.02 Task & project management`.
-            - Templates belong in the most specific `.03 Templates`.
-            - Links belong in the most specific `.04 Links`.
-            - Completed or inactive material that should not be organised belongs in the most specific `.09 Archive`.
-            - Prefer existing numbered areas over creating new top-level folders.
-            - Do not create or use `.05`, `.06`, `.07`, or `.08`; these are reserved.
+            - Prefer a specific content ID such as `15.52 Trip to NYC` over a category-level standard-zero folder.
+            - Use category-level Inbox/Archive/Tasks/Templates/Links only when the user explicitly wants that bucket for that category.
 
             ## Default Areas and Categories
 
             \(johnnyDecimalCategoryMap())
 
-            ## Destination Pattern
+            ## Johnny.Decimal Destination Pattern
 
-            `QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`
+            `QUIET_CONTENT_HOME/<area>/<category>/<AC.ID specific-content-folder>/<original-name>`
+
+            ## Candidate Method: Custom
+
+            Use this only if the user describes a custom filing preference.
+
+            - Ask concise follow-up questions until the rules are concrete enough to organize files.
+            - Then rewrite this memory file so only the user's custom method remains.
+            - Preserve exact naming, grouping, and destination preferences the user gives.
             """
             var migrated = memory.trimmingCharacters(in: .whitespacesAndNewlines)
+            let hasFinalMethod = migrated.range(of: #"## Final Organizing Method:"#, options: .regularExpression) != nil
+            let hasOnboarding = migrated.contains("Status: uninitialized") || migrated.contains("## Method Initialization")
+            let legacyDefaultRange = migrated.range(
+                of: #"(?s)\n## (Default Method: Johnny\.Decimal System|Johnny\.Decimal System)\n.*?(?=\n## Conversation Style|\n## Learning User Preferences|$)"#,
+                options: .regularExpression
+            )
+            if !hasFinalMethod, !hasOnboarding, let legacyDefaultRange {
+                migrated.replaceSubrange(legacyDefaultRange, with: "\n" + methodOnboardingGuidance + "\n" + candidateMethodGuidance + "\n")
+            }
             if !migrated.contains("## Learning User Preferences") {
                 migrated.append(preferenceGuidance)
             }
-            if let taxonomyRange = migrated.range(
-                of: #"(?s)\n## (Subject Taxonomy|Quiet Decimal Taxonomy)\n.*?(?=\n## Conversation Style|\n## Learning User Preferences|$)"#,
-                options: .regularExpression
-            ) {
-                migrated.replaceSubrange(taxonomyRange, with: "\n" + johnnyDecimalGuidance + "\n")
-            } else if !migrated.contains("## Default Method: Johnny.Decimal System")
-                || !migrated.contains("## Default Areas and Categories")
-                || migrated.contains("## Johnny.Decimal System")
-                || !migrated.contains("https://johnnydecimal.com/")
-                || migrated.contains("Inbox for Blackhole")
-                || migrated.contains("Index for Blackhole")
-                || migrated.contains("Inbox for Quiet")
-                || migrated.contains("Index for Quiet")
-                || migrated.contains("Someday material belongs")
-                || migrated.contains("00-09 System management/00 System management") {
+            if !hasFinalMethod, !migrated.contains("## Method Initialization") {
                 if let conversationRange = migrated.range(of: "\n## Conversation Style") {
-                    if let currentRange = migrated.range(
-                        of: #"(?s)\n## (Default Method: Johnny\.Decimal System|Johnny\.Decimal System)\n.*?(?=\n## Conversation Style|\n## Learning User Preferences|$)"#,
-                        options: .regularExpression
-                    ) {
-                        migrated.replaceSubrange(currentRange, with: "\n" + johnnyDecimalGuidance + "\n")
-                    } else {
-                        migrated.insert(contentsOf: "\n" + johnnyDecimalGuidance + "\n", at: conversationRange.lowerBound)
-                    }
+                    migrated.insert(contentsOf: "\n" + methodOnboardingGuidance + "\n" + candidateMethodGuidance + "\n", at: conversationRange.lowerBound)
                 } else {
                     migrated.append("\n")
-                    migrated.append(johnnyDecimalGuidance)
+                    migrated.append(methodOnboardingGuidance)
+                    migrated.append(candidateMethodGuidance)
                 }
             }
             migrated = migrated.replacingOccurrences(
                 of: "`QUIET_CONTENT_HOME/<subject>/<original-name>`",
-                with: "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`"
+                with: "`QUIET_CONTENT_HOME/<final-method-destination>/<original-name>`"
             )
             migrated = migrated.replacingOccurrences(
                 of: "`QUIET_CONTENT_HOME/<numbered-area>/<numbered-category-or-topic>/<original-name>`",
-                with: "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`"
+                with: "`QUIET_CONTENT_HOME/<final-method-destination>/<original-name>`"
+            )
+            migrated = migrated.replacingOccurrences(
+                of: "<AC.ID standard-zero-or-specific-ID>",
+                with: "<AC.ID specific-content-folder>"
             )
             migrated = migrated
                 .replacingOccurrences(of: "Blackhole", with: "Quiet")
@@ -2090,7 +2132,7 @@ struct QuietView: View {
                 .zIndex(10)
             }
         }
-        .background(Color(nsColor: quietWindowFill))
+        .background(Color.clear)
         .background(PasteboardShortcutCatcher {
             handleConversationPaste()
         })
@@ -2655,7 +2697,7 @@ struct QuietView: View {
         .padding(.horizontal, 6)
         .padding(.top, 8)
         .padding(.bottom, 6)
-        .background(Color(nsColor: quietWindowFill))
+        .background(Color.clear)
     }
 
     private func submitCurrentMessage() {
@@ -4477,6 +4519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var frameKeeper: WindowFrameKeeper?
     private var statusItem: NSStatusItem?
     private weak var chromeRootView: NSView?
+    private weak var chromeTintView: NSView?
     private weak var hostingView: NSView?
     private var appearanceObserver: NSObjectProtocol?
     private var desktopClientObserver: NSObjectProtocol?
@@ -4502,34 +4545,50 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         contentView.wantsLayer = true
         contentView.layer?.backgroundColor = NSColor.clear.cgColor
 
-        let blackChromeView = NSView()
-        blackChromeView.translatesAutoresizingMaskIntoConstraints = false
-        blackChromeView.wantsLayer = true
-        blackChromeView.layer?.cornerRadius = 24
-        blackChromeView.layer?.cornerCurve = .continuous
-        blackChromeView.layer?.masksToBounds = true
-        blackChromeView.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: nil)
-        blackChromeView.layer?.borderWidth = 0.8
-        blackChromeView.layer?.borderColor = quietResolvedCGColor(quietBorder, appearance: nil)
-        rootView.addSubview(blackChromeView)
-        blackChromeView.addSubview(contentView)
-        chromeRootView = blackChromeView
+        let chromeView = NSVisualEffectView()
+        chromeView.translatesAutoresizingMaskIntoConstraints = false
+        chromeView.wantsLayer = true
+        chromeView.material = .underWindowBackground
+        chromeView.blendingMode = .behindWindow
+        chromeView.state = .active
+        chromeView.isEmphasized = false
+        chromeView.layer?.cornerRadius = 24
+        chromeView.layer?.cornerCurve = .continuous
+        chromeView.layer?.masksToBounds = true
+        chromeView.layer?.borderWidth = 0.8
+        chromeView.layer?.borderColor = quietResolvedCGColor(quietBorder, appearance: nil)
+
+        let chromeTintView = NSView()
+        chromeTintView.translatesAutoresizingMaskIntoConstraints = false
+        chromeTintView.wantsLayer = true
+        chromeTintView.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: nil)
+
+        rootView.addSubview(chromeView)
+        chromeView.addSubview(chromeTintView)
+        chromeView.addSubview(contentView)
+        chromeRootView = chromeView
+        self.chromeTintView = chromeTintView
 
         let hostingView = NSHostingView(rootView: QuietView())
         hostingView.translatesAutoresizingMaskIntoConstraints = false
-        hostingView.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: nil)
+        hostingView.wantsLayer = true
+        hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         contentView.addSubview(hostingView)
         self.hostingView = hostingView
 
         NSLayoutConstraint.activate([
-            blackChromeView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
-            blackChromeView.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
-            blackChromeView.topAnchor.constraint(equalTo: rootView.topAnchor),
-            blackChromeView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
-            contentView.leadingAnchor.constraint(equalTo: blackChromeView.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: blackChromeView.trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: blackChromeView.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: blackChromeView.bottomAnchor),
+            chromeView.leadingAnchor.constraint(equalTo: rootView.leadingAnchor),
+            chromeView.trailingAnchor.constraint(equalTo: rootView.trailingAnchor),
+            chromeView.topAnchor.constraint(equalTo: rootView.topAnchor),
+            chromeView.bottomAnchor.constraint(equalTo: rootView.bottomAnchor),
+            chromeTintView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor),
+            chromeTintView.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor),
+            chromeTintView.topAnchor.constraint(equalTo: chromeView.topAnchor),
+            chromeTintView.bottomAnchor.constraint(equalTo: chromeView.bottomAnchor),
+            contentView.leadingAnchor.constraint(equalTo: chromeView.leadingAnchor),
+            contentView.trailingAnchor.constraint(equalTo: chromeView.trailingAnchor),
+            contentView.topAnchor.constraint(equalTo: chromeView.topAnchor),
+            contentView.bottomAnchor.constraint(equalTo: chromeView.bottomAnchor),
             hostingView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
             hostingView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
             hostingView.topAnchor.constraint(equalTo: contentView.topAnchor),
@@ -4725,12 +4784,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateChromeBorder() {
         guard let chromeRootView else { return }
         let appearance = chromeRootView.effectiveAppearance
-        chromeRootView.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: appearance)
+        chromeRootView.layer?.backgroundColor = NSColor.clear.cgColor
         chromeRootView.layer?.borderColor = quietResolvedCGColor(quietBorder, appearance: appearance)
-        chromeRootView.subviews.forEach { subview in
-            subview.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: appearance)
-        }
-        hostingView?.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: appearance)
+        chromeTintView?.layer?.backgroundColor = quietResolvedCGColor(quietWindowFill, appearance: appearance)
+        hostingView?.layer?.backgroundColor = NSColor.clear.cgColor
     }
 
     private func setStandardWindowButtonsHidden(_ isHidden: Bool, for window: NSWindow? = nil) {
@@ -4973,9 +5030,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func positionMenuBarWindow(_ window: NSWindow, source: MenuBarPresentationSource) {
         switch source {
         case .statusItem:
-            positionWindowUnderStatusItem(window)
+            _ = positionWindowUnderStatusItem(window)
         case .keyboardShortcut:
-            positionWindowAtTopRight(window)
+            if !positionWindowUnderStatusItem(window) {
+                positionWindowAtTopRight(window)
+            }
         }
     }
 
@@ -4988,11 +5047,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func positionWindowUnderStatusItem(_ window: NSWindow) {
+    @discardableResult
+    private func positionWindowUnderStatusItem(_ window: NSWindow) -> Bool {
         guard let button = statusItem?.button,
               let buttonWindow = button.window,
               let screen = buttonWindow.screen ?? NSScreen.main else {
-            return
+            return false
         }
 
         let buttonRectInWindow = button.convert(button.bounds, to: nil)
@@ -5012,6 +5072,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let y = max(targetY, visibleFrame.minY + margin)
 
         window.setFrameOrigin(NSPoint(x: x, y: y))
+        return true
     }
 
     private func positionWindowAtTopRight(_ window: NSWindow) {

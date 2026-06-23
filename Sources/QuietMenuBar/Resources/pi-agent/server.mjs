@@ -56,9 +56,6 @@ const systemAreaDir = join(quietContentHome, "00-09 System-management area");
 const systemManagementDir = join(systemAreaDir, "00 System-management category");
 const indexDir = join(systemManagementDir, "00.00 JDex for the system");
 const inboxDir = join(systemManagementDir, "00.01 Inbox for the system");
-const taskProjectDir = join(systemManagementDir, "00.02 Task & project management for the system");
-const templatesDir = join(systemManagementDir, "00.03 Templates for the system");
-const linksDir = join(systemManagementDir, "00.04 Links for the system");
 const archiveDir = join(systemManagementDir, "00.09 Archive for the system");
 const filesDir = quietContentHome;
 const logDir = join(quietHome, "logs");
@@ -202,28 +199,10 @@ function ensureQuietDecimalStructure() {
     systemManagementDir,
     indexDir,
     inboxDir,
-    taskProjectDir,
-    templatesDir,
-    linksDir,
     archiveDir,
     ...areaCategorySpecs.flatMap((spec) => [
       join(quietContentHome, spec.area),
-      ...spec.categories.flatMap((category) => {
-        const categoryNumber = category.slice(0, 2);
-        const categoryDir = join(quietContentHome, spec.area, category);
-        const scope = categoryNumber.endsWith("0")
-          ? `area ${categoryNumber[0]}0-${categoryNumber[0]}9`
-          : `category ${categoryNumber}`;
-        return [
-          categoryDir,
-          join(categoryDir, `${categoryNumber}.00 JDex for ${scope}`),
-          join(categoryDir, `${categoryNumber}.01 Inbox for ${scope}`),
-          join(categoryDir, `${categoryNumber}.02 Task & project management for ${scope}`),
-          join(categoryDir, `${categoryNumber}.03 Templates for ${scope}`),
-          join(categoryDir, `${categoryNumber}.04 Links for ${scope}`),
-          join(categoryDir, `${categoryNumber}.09 Archive for ${scope}`),
-        ];
-      }),
+      ...spec.categories.map((category) => join(quietContentHome, spec.area, category)),
     ]),
   ];
   for (const dir of dirs) {
@@ -241,9 +220,6 @@ Quiet uses a Johnny.Decimal system. The JDex is the master record for the system
 
 - 00.00 JDex for the system
 - 00.01 Inbox for the system
-- 00.02 Task & project management for the system
-- 00.03 Templates for the system
-- 00.04 Links for the system
 - 00.09 Archive for the system
 
 ## Default Areas
@@ -269,14 +245,10 @@ function migrateLegacyTopLevelDirectories() {
     [".inbox", inboxDir],
     ["00-09 System management/00 System management/00.00 Index for Blackhole", indexDir],
     ["00-09 System management/00 System management/00.01 Inbox for Blackhole", inboxDir],
-    ["00-09 System management/00 System management/00.02 Task & project management for Blackhole", taskProjectDir],
-    ["00-09 System management/00 System management/00.03 Templates for Blackhole", templatesDir],
     ["00-09 System management/00 System management/00.08 Someday for Blackhole", archiveDir],
     ["00-09 System management/00 System management/00.09 Archive for Blackhole", archiveDir],
     ["00-09 System management/00 System management/00.00 Index for Quiet", indexDir],
     ["00-09 System management/00 System management/00.01 Inbox for Quiet", inboxDir],
-    ["00-09 System management/00 System management/00.02 Task & project management for Quiet", taskProjectDir],
-    ["00-09 System management/00 System management/00.03 Templates for Quiet", templatesDir],
     ["00-09 System management/00 System management/00.08 Someday for Quiet", archiveDir],
     ["00-09 System management/00 System management/00.09 Archive for Quiet", archiveDir],
   ];
@@ -302,6 +274,22 @@ const defaultMemory = `
 
 These are user-editable resource organizing rules for Quiet.
 
+## Method Initialization
+
+Status: uninitialized
+
+Quiet has not chosen the user's final file organizing method yet.
+
+- Until this status is changed, do not assume Johnny.Decimal, PARA, or any other final method.
+- At the start of a chat or before organizing files, ask the user to choose one organizing preference:
+  1. PARA: best for most people; simple, action-oriented, and organized around Projects, Areas, Resources, and Archives.
+  2. Johnny.Decimal: best for highly structured users who want stable numeric addresses and do not mind maintaining a stricter system.
+  3. Custom: the user can describe their own preferred filing rules.
+- After the user clearly chooses a method, edit this memory file immediately.
+- When editing after a choice, remove this uninitialized onboarding section and remove all non-selected candidate methods. Keep only one final organizing method.
+- The final method section must be titled exactly \`## Final Organizing Method: PARA\`, \`## Final Organizing Method: Johnny.Decimal\`, or \`## Final Organizing Method: Custom\`.
+- If the user chooses PARA or Johnny.Decimal, write the corresponding final method from the candidate below. If the user chooses Custom, summarize their custom rules as the only final method.
+
 ## Learning User Preferences
 
 - When the user expresses a stable preference for how resources should be categorized, named, or arranged, update this memory file so future organizing tasks follow it.
@@ -309,22 +297,32 @@ These are user-editable resource organizing rules for Quiet.
 - Keep memory edits concise and user-facing. Do not record internal logs, manifests, or implementation details.
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
 
-## Default Method: Johnny.Decimal System
+## Candidate Method: PARA
 
-This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+Use this only if the user chooses PARA. PARA is a light, general-purpose method for most people.
 
-More information: https://johnnydecimal.com/
+- Organize by current usefulness and action context, not by a rigid taxonomy.
+- Use four top-level folders:
+  - \`1 Projects\`: active outcomes with a finish line.
+  - \`2 Areas\`: ongoing parts of the user's life/work that they maintain or revisit.
+  - \`3 Resources\`: reference material, community/third-party material, topics, learning, inspiration, and reusable knowledge.
+  - \`4 Archives\`: inactive projects, old areas, stale resources, and completed material.
+- Prefer simple names and shallow nesting.
+- When unsure whether something is an Area or Resource, ask whether it is part of the user's own ongoing life/work system or merely reference material.
+- Inbox material may stay in Quiet's system inbox until the user confirms where it belongs.
 
-These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
+## Candidate Method: Johnny.Decimal
 
-- Use Quiet's Johnny.Decimal structure directly.
-- New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
+Use this only if the user chooses Johnny.Decimal. Johnny.Decimal is stricter and fits users who want a stable numeric address system.
+
+- Use Quiet's Johnny.Decimal area/category structure directly.
+- Quiet pre-creates only the area/category skeleton plus the system-level \`00.00 JDex\`, \`00.01 Inbox\`, and \`00.09 Archive\`.
+- Do not automatically create \`AC.00\`, \`AC.01\`, \`AC.02\`, \`AC.03\`, \`AC.04\`, or \`AC.09\` inside every category.
+- Create specific \`AC.ID\` folders only when there is real content or the user asks.
+- New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\` until organized.
 - The JDex lives in \`00-09 System-management area/00 System-management category/00.00 JDex for the system\`.
-- In-progress or unfiled resources stay in the most specific \`.01 Inbox\`.
-- Tasks and project-management material belongs in the most specific \`.02 Task & project management\`.
-- Templates belong in the most specific \`.03 Templates\`.
-- Links belong in the most specific \`.04 Links\`.
-- Completed or inactive material that should not be organised belongs in the most specific \`.09 Archive\`.
+- Prefer a specific content ID such as \`15.52 Trip to NYC\` over a category-level standard-zero folder.
+- Use category-level Inbox/Archive/Tasks/Templates/Links only when the user explicitly wants that bucket for that category.
 - Prefer existing numbered areas over creating new top-level folders.
 - Do not create or use \`.05\`, \`.06\`, \`.07\`, or \`.08\`; these are reserved.
 
@@ -332,9 +330,17 @@ These pre-created management and standard-zero folders are primarily for the age
 
 ${categoryMapText()}
 
-## Destination Pattern
+## Johnny.Decimal Destination Pattern
 
-\`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>\`
+\`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID specific-content-folder>/<original-name>\`
+
+## Candidate Method: Custom
+
+Use this only if the user describes a custom filing preference.
+
+- Ask concise follow-up questions until the rules are concrete enough to organize files.
+- Then rewrite this memory file so only the user's custom method remains.
+- Preserve exact naming, grouping, and destination preferences the user gives.
 
 ## Conversation Style
 
@@ -353,74 +359,91 @@ const memoryPreferenceGuidance = `
 - This file is located at \`QUIET_HOME/memory.md\`; you may edit it with bash when updating remembered organizing preferences.
 `.trim();
 
-const johnnyDecimalMemoryGuidance = `
-## Default Method: Johnny.Decimal System
+const methodOnboardingGuidance = `
+## Method Initialization
 
-This is Quiet's default organizing method. If the user explicitly prefers another method, replace this section with that method.
+Status: uninitialized
 
-More information: https://johnnydecimal.com/
+Quiet has not chosen the user's final file organizing method yet.
 
-These pre-created management and standard-zero folders are primarily for the agent's consistency. Users do not need to maintain them manually.
+- Until this status is changed, do not assume Johnny.Decimal, PARA, or any other final method.
+- At the start of a chat or before organizing files, ask the user to choose one organizing preference:
+  1. PARA: best for most people; simple, action-oriented, and organized around Projects, Areas, Resources, and Archives.
+  2. Johnny.Decimal: best for highly structured users who want stable numeric addresses and do not mind maintaining a stricter system.
+  3. Custom: the user can describe their own preferred filing rules.
+- After the user clearly chooses a method, edit this memory file immediately.
+- When editing after a choice, remove this uninitialized onboarding section and remove all non-selected candidate methods. Keep only one final organizing method.
+- The final method section must be titled exactly \`## Final Organizing Method: PARA\`, \`## Final Organizing Method: Johnny.Decimal\`, or \`## Final Organizing Method: Custom\`.
+`.trim();
 
-- Use Quiet's Johnny.Decimal structure directly.
-- New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\`.
+const candidateMethodGuidance = `
+## Candidate Method: PARA
+
+Use this only if the user chooses PARA. PARA is a light, general-purpose method for most people.
+
+- Use four top-level folders: \`1 Projects\`, \`2 Areas\`, \`3 Resources\`, and \`4 Archives\`.
+- Projects are active outcomes with a finish line.
+- Areas are ongoing parts of the user's life/work that they maintain or revisit.
+- Resources are reference material, community/third-party material, topics, learning, inspiration, and reusable knowledge.
+- Archives are inactive projects, old areas, stale resources, and completed material.
+
+## Candidate Method: Johnny.Decimal
+
+Use this only if the user chooses Johnny.Decimal. Johnny.Decimal is stricter and fits users who want a stable numeric address system.
+
+- Use Quiet's Johnny.Decimal area/category structure directly.
+- Quiet pre-creates only the area/category skeleton plus the system-level \`00.00 JDex\`, \`00.01 Inbox\`, and \`00.09 Archive\`.
+- Do not automatically create \`AC.00\`, \`AC.01\`, \`AC.02\`, \`AC.03\`, \`AC.04\`, or \`AC.09\` inside every category.
+- Create specific \`AC.ID\` folders only when there is real content or the user asks.
+- New drops enter \`00-09 System-management area/00 System-management category/00.01 Inbox for the system\` until organized.
 - The JDex lives in \`00-09 System-management area/00 System-management category/00.00 JDex for the system\`.
-- In-progress or unfiled resources stay in the most specific \`.01 Inbox\`.
-- Tasks and project-management material belongs in the most specific \`.02 Task & project management\`.
-- Templates belong in the most specific \`.03 Templates\`.
-- Links belong in the most specific \`.04 Links\`.
-- Completed or inactive material that should not be organised belongs in the most specific \`.09 Archive\`.
-- Prefer existing numbered areas over creating new top-level folders.
-- Do not create or use \`.05\`, \`.06\`, \`.07\`, or \`.08\`; these are reserved.
+- Prefer a specific content ID such as \`15.52 Trip to NYC\` over a category-level standard-zero folder.
+- Use category-level Inbox/Archive/Tasks/Templates/Links only when the user explicitly wants that bucket for that category.
 
 ## Default Areas and Categories
 
 ${categoryMapText()}
 
-## Destination Pattern
+## Johnny.Decimal Destination Pattern
 
-\`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>\`
+\`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID specific-content-folder>/<original-name>\`
+
+## Candidate Method: Custom
+
+Use this only if the user describes a custom filing preference.
+
+- Ask concise follow-up questions until the rules are concrete enough to organize files.
+- Then rewrite this memory file so only the user's custom method remains.
+- Preserve exact naming, grouping, and destination preferences the user gives.
 `.trim();
 
 function migrateMemoryText(memory) {
   let next = memory.trim();
+  const legacyDefaultJohnnyPattern = /\n## (?:Default Method: Johnny\.Decimal System|Johnny\.Decimal System)\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
+  const hasFinalMethod = /## Final Organizing Method:/i.test(next);
+  const hasOnboarding = next.includes("Status: uninitialized") || next.includes("## Method Initialization");
+
+  if (!hasFinalMethod && !hasOnboarding && legacyDefaultJohnnyPattern.test(next)) {
+    next = next.replace(legacyDefaultJohnnyPattern, `\n${methodOnboardingGuidance}\n\n${candidateMethodGuidance}\n`);
+  }
+
   if (!next.includes("## Learning User Preferences")) {
     next = `${next}\n\n${memoryPreferenceGuidance}`;
   }
 
-  const legacyTaxonomyPattern = /\n## (?:Subject Taxonomy|Quiet Decimal Taxonomy)\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
-  if (legacyTaxonomyPattern.test(next)) {
-    next = next.replace(legacyTaxonomyPattern, `\n${johnnyDecimalMemoryGuidance}\n`);
-  } else if (!next.includes("## Default Method: Johnny.Decimal System") && !next.includes("## Johnny.Decimal System")) {
+  if (!hasFinalMethod && !next.includes("## Method Initialization")) {
     const conversationIndex = next.indexOf("\n## Conversation Style");
     if (conversationIndex >= 0) {
-      next = `${next.slice(0, conversationIndex).trim()}\n\n${johnnyDecimalMemoryGuidance}\n${next.slice(conversationIndex)}`;
+      next = `${next.slice(0, conversationIndex).trim()}\n\n${methodOnboardingGuidance}\n\n${candidateMethodGuidance}\n${next.slice(conversationIndex)}`;
     } else {
-      next = `${next}\n\n${johnnyDecimalMemoryGuidance}`;
+      next = `${next}\n\n${methodOnboardingGuidance}\n\n${candidateMethodGuidance}`;
     }
   }
 
-  const currentJohnnyPattern = /\n## (?:Default Method: Johnny\.Decimal System|Johnny\.Decimal System)\n[\s\S]*?(?=\n## Conversation Style|\n## Learning User Preferences|$)/;
-  if (
-    currentJohnnyPattern.test(next)
-    && (
-      !next.includes("## Default Areas and Categories")
-      || next.includes("## Johnny.Decimal System")
-      || !next.includes("https://johnnydecimal.com/")
-      || next.includes("Inbox for Blackhole")
-      || next.includes("Index for Blackhole")
-      || next.includes("Inbox for Quiet")
-      || next.includes("Index for Quiet")
-      || next.includes("Someday material belongs")
-      || next.includes("00-09 System management/00 System management")
-    )
-  ) {
-    next = next.replace(currentJohnnyPattern, `\n${johnnyDecimalMemoryGuidance}\n`);
-  }
-
   next = next
-    .replace(/`QUIET_CONTENT_HOME\/<subject>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`")
-    .replace(/`QUIET_CONTENT_HOME\/<numbered-area>\/<numbered-category-or-topic>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>`")
+    .replace(/`QUIET_CONTENT_HOME\/<subject>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<final-method-destination>/<original-name>`")
+    .replace(/`QUIET_CONTENT_HOME\/<numbered-area>\/<numbered-category-or-topic>\/<original-name>`/g, "`QUIET_CONTENT_HOME/<final-method-destination>/<original-name>`")
+    .replace(/<AC\.ID standard-zero-or-specific-ID>/g, "<AC.ID specific-content-folder>")
     .replace(/Blackhole/g, "Quiet")
     .replace(/blackhole/g, "quiet");
   next = next.replace(/\n- Do not mention internal logs, manifests, or implementation files unless the user asks\./g, "");
@@ -1212,42 +1235,47 @@ function shortStat(path) {
 
 function buildOrganizePrompt(paths, userText) {
   const resourceList = paths.map(shortStat);
+  const memoryText = existsSync(memoryPath) ? readFileSync(memoryPath, "utf8") : "";
+  const methodIsUninitialized = memoryText.includes("Status: uninitialized");
   const rules = language === "zh"
     ? `硬性规则：
 1. 只处理本次列出的 00.01 Inbox 资源：${inboxDir}
 2. 请按 ~/.quiet/memory.md 的规则理解用户的偏好并整理。
 3. 必须用 mv 移动，不要复制，不要删除用户文件或资源；成功后 00.01 Inbox 源路径不应继续存在，除非它仍处于未归档状态。
 4. 整理后的文件只能放到 Quiet 根目录：${filesDir}
-5. 默认直接使用 Johnny.Decimal 编号结构；优先放进已有编号区域，不要回到旧的纯 subject 一级目录。
-6. 系统管理区是 ${systemManagementDir}，包含 00.00 JDex、00.01 Inbox、00.02 Task & project management、00.03 Templates、00.04 Links、00.09 Archive。
-7. 每个 area 下都有 10 个 category；每个 category 下都有官方 standard-zero ID：AC.00、AC.01、AC.02、AC.03、AC.04、AC.09。不要创建或使用 AC.05-AC.08。
-8. 优先放入最具体的 proper ID；如果无法确定 proper ID，但能确定 category，则放入该 category 的 AC.01 Inbox；如果只能确定 area，则放入 A0.01 Inbox；完全无法判断才放入 00.01 Inbox。
+5. 如果 memory 仍是 \`Status: uninitialized\`，不要整理这些资源；把它们留在 00.01 Inbox，并先向用户介绍 PARA、Johnny.Decimal 和自定义三种选择，询问最终偏好。
+6. 如果用户已经选定方法，只遵循 memory 中唯一的最终整理方法；不要把未选择的 PARA/JD 候选规则混入结果。
+7. 如果最终方法是 Johnny.Decimal，Quiet 只预创建 area/category 骨架和系统级 00.00 JDex、00.01 Inbox、00.09 Archive；不要自动创建每个 category 下的 00/01/02/03/04/09 标准零位。
+8. 如果最终方法是 Johnny.Decimal，优先创建或使用具体内容 ID，例如 \`15.52 Trip to NYC\`；只有用户明确想要某个 category 的 Inbox/Archive/Tasks/Templates/Links 时，才创建该 category 的标准零位。
 9. Quiet 生成的批次归档记录放在 ${archiveDir}；原始用户资源不要放进系统管理区，除非它们仍在 00.01 Inbox 等待处理。
-10. 目标路径使用 ${filesDir}/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name>。
-11. 不要新建摘要、索引、报告或说明文档；如需说明，只在对用户的最终回复里简短总结。
-12. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
-13. ${copy.organizeDoneRule}`
+10. 不要新建摘要、索引、报告或说明文档；如需说明，只在对用户的最终回复里简短总结。
+11. 按文件名、扩展名和必要内容判断用途；链接和 snippet 已保存为 Markdown 资源文件，不要只按扩展名机械分类。
+12. ${copy.organizeDoneRule}`
     : `Hard rules:
 1. Only process the 00.01 Inbox resources listed in this task: ${inboxDir}
 2. Follow ~/.quiet/memory.md to understand the user's preferences and organize accordingly.
 3. Move with mv; do not copy or delete user files or resources. After a successful move, the 00.01 Inbox source path should no longer exist unless it remains unfiled or needs confirmation.
 4. Organized files must stay directly under the Quiet root: ${filesDir}
-5. Use the Johnny.Decimal numbered structure directly. Prefer existing numbered areas; do not fall back to old plain subject top-level folders.
-6. The system-management category is ${systemManagementDir}: 00.00 JDex, 00.01 Inbox, 00.02 Task & project management, 00.03 Templates, 00.04 Links, 00.09 Archive.
-7. Every area has 10 categories; every category has the official standard-zero IDs: AC.00, AC.01, AC.02, AC.03, AC.04, AC.09. Do not create or use AC.05-AC.08.
-8. Prefer the most specific proper ID. If you cannot identify a proper ID but can identify the category, use that category's AC.01 Inbox. If you can only identify the area, use A0.01 Inbox. Use 00.01 Inbox only when the area is unknown.
+5. If memory still says \`Status: uninitialized\`, do not organize these resources; leave them in 00.01 Inbox and first ask the user to choose PARA, Johnny.Decimal, or a custom method.
+6. If the user has selected a method, follow only the single final method in memory; do not mix in unselected PARA/JD candidate rules.
+7. If the final method is Johnny.Decimal, Quiet pre-creates only the area/category skeleton and system-level 00.00 JDex, 00.01 Inbox, and 00.09 Archive; do not auto-create each category's 00/01/02/03/04/09 standard-zero folders.
+8. If the final method is Johnny.Decimal, prefer a concrete content ID such as \`15.52 Trip to NYC\`; create category-level Inbox/Archive/Tasks/Templates/Links only when the user explicitly wants that bucket.
 9. Quiet-created batch archive records go in ${archiveDir}. Do not put original user resources in system management unless they are still waiting in 00.01 Inbox.
-10. Use ${filesDir}/<area>/<category>/<AC.ID standard-zero-or-specific-ID>/<original-name> as the destination pattern.
-11. Do not create summaries, indexes, reports, or notes as files. Summarize only in the final user-facing reply.
-12. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
-13. ${copy.organizeDoneRule}`;
+10. Do not create summaries, indexes, reports, or notes as files. Summarize only in the final user-facing reply.
+11. Understand purpose from filenames, extensions, and content when needed. Links and snippets are saved as Markdown resource files; do not classify mechanically by extension only.
+12. ${copy.organizeDoneRule}`;
+  const onboardingReminder = methodIsUninitialized
+    ? language === "zh"
+      ? "\n\n重要：memory 仍未初始化。请先询问用户偏好，不要整理本批资源。"
+      : "\n\nImportant: memory is still uninitialized. Ask for the user's organizing preference first; do not organize this batch yet."
+    : "";
   const pendingLabel = language === "zh" ? "待整理资源" : "Resources to organize";
   return `
 ${userText || copy.organizeFallback}
 
 ${copy.organizeInstruction}
 
-${rules}
+${rules}${onboardingReminder}
 
 Quiet dirs:
 - content root: ${quietContentHome}
