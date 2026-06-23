@@ -208,6 +208,7 @@ function ensureQuietDecimalStructure() {
   for (const dir of dirs) {
     mkdirSync(dir, { recursive: true });
   }
+  cleanupEmptyAutoCreatedStandardZeroDirs();
   migrateLegacyTopLevelDirectories();
 
   const indexPath = join(indexDir, "00.00 JDex for the system.md");
@@ -231,6 +232,59 @@ Quiet uses a Johnny.Decimal system. The JDex is the master record for the system
 - 50-59 Assets & Property 资产
 - 90-99 Archive 归档
 `, "utf8");
+  }
+}
+
+function cleanupEmptyAutoCreatedStandardZeroDirs() {
+  const standardZeroNames = new Set([
+    "JDex",
+    "Inbox",
+    "Task & project management",
+    "Templates",
+    "Links",
+    "Archive",
+  ]);
+  const systemStandardZeroDirs = [
+    "00.02 Task & project management for the system",
+    "00.03 Templates for the system",
+    "00.04 Links for the system",
+  ].map((name) => join(systemManagementDir, name));
+
+  const categoryStandardZeroDirs = areaCategorySpecs.flatMap((spec) => (
+    spec.categories.flatMap((category) => {
+      const categoryNumber = category.slice(0, 2);
+      const categoryDir = join(quietContentHome, spec.area, category);
+      return readdirIfDirectory(categoryDir)
+        .filter((entry) => {
+          if (!entry.isDirectory()) return false;
+          if (!entry.name.startsWith(`${categoryNumber}.`)) return false;
+          return [...standardZeroNames].some((name) => entry.name.includes(name));
+        })
+        .map((entry) => join(categoryDir, entry.name));
+    })
+  ));
+
+  for (const dir of [...systemStandardZeroDirs, ...categoryStandardZeroDirs]) {
+    removeDirectoryIfEmpty(dir);
+  }
+}
+
+function readdirIfDirectory(dir) {
+  try {
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) return [];
+    return readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+}
+
+function removeDirectoryIfEmpty(dir) {
+  try {
+    if (!existsSync(dir) || !statSync(dir).isDirectory()) return;
+    if (readdirSync(dir).length > 0) return;
+    rmSync(dir, { recursive: true, force: false });
+  } catch {
+    // Preserve anything we cannot prove is an empty auto-created directory.
   }
 }
 
