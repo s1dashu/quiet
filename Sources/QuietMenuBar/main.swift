@@ -2931,10 +2931,31 @@ struct QuietView: View {
 struct EmptyConversationHint: View {
     let metrics: ComputerMetricsSnapshot
     let onPromptSelected: (String) -> Void
+    @State private var currentTipIndex = 0
+
+    private let tipTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8),
+    ]
+
+    private let tips: [EmptyStateTip] = [
+        EmptyStateTip(
+            iconId: "keyboard",
+            fallbackSystemName: "keyboard",
+            text: "使用 `Alt` + `Space` 快捷唤出 `Quiet`"
+        ),
+        EmptyStateTip(
+            iconId: "upload-cloud",
+            fallbackSystemName: "icloud.and.arrow.up",
+            text: "拖拽文件到 Quiet，Agent 将会自动为你整理"
+        ),
+        EmptyStateTip(
+            iconId: "sparkles",
+            fallbackSystemName: "sparkles",
+            text: "描述你的个人偏好，Agent 会记住它"
+        ),
     ]
 
     private let promptSuggestions = [
@@ -2946,6 +2967,12 @@ struct EmptyConversationHint: View {
 
     var body: some View {
         VStack(spacing: 12) {
+            if let tip = tips[safe: currentTipIndex] {
+                EmptyStateTipView(tip: tip)
+                    .id(tip.id)
+                    .transition(.opacity)
+            }
+
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(metrics.cards) { card in
                     ComputerMetricTile(card: card)
@@ -2960,21 +2987,48 @@ struct EmptyConversationHint: View {
                 }
             }
             .padding(.top, 1)
-
-            HStack(spacing: 6) {
-                LucideIcon(id: "keyboard", fallbackSystemName: "keyboard")
-                    .frame(width: 14, height: 14)
-                    .foregroundStyle(quietChatMutedText.opacity(0.72))
-
-                Text("使用 `Alt` + `Space` 快捷唤出 `Quiet`")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(quietChatMutedText.opacity(0.78))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
         }
         .frame(maxWidth: 300)
         .padding(.horizontal, 18)
+        .onReceive(tipTimer) { _ in
+            guard tips.count > 1 else { return }
+            withAnimation(.easeInOut(duration: 0.24)) {
+                currentTipIndex = (currentTipIndex + 1) % tips.count
+            }
+        }
+    }
+}
+
+struct EmptyStateTip: Identifiable, Equatable {
+    let iconId: String
+    let fallbackSystemName: String
+    let text: String
+
+    var id: String { text }
+}
+
+struct EmptyStateTipView: View {
+    let tip: EmptyStateTip
+
+    var body: some View {
+        HStack(spacing: 6) {
+            LucideIcon(id: tip.iconId, fallbackSystemName: tip.fallbackSystemName)
+                .frame(width: 14, height: 14)
+                .foregroundStyle(quietChatMutedText.opacity(0.72))
+
+            Text(tip.text)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(quietChatMutedText.opacity(0.78))
+                .lineLimit(1)
+                .minimumScaleFactor(0.78)
+        }
+        .frame(height: 18)
+    }
+}
+
+private extension Array {
+    subscript(safe index: Index) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
