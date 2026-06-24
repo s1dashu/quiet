@@ -2940,8 +2940,8 @@ struct EmptyConversationHint: View {
     private let promptSuggestions = [
         "帮我将我的文件用 PARA 方法整理",
         "看看我电脑上有哪些冗余文件占据了大量空间？",
-        "帮我看看有哪些应用占了大量内存？",
-        "帮我将所有音频文件改成用 IINA 打开",
+        "帮我将我的 JPG 文件转成 PNG 格式",
+        "帮我将 MP3 格式文件改成默认用 IINA 打开",
     ]
 
     var body: some View {
