@@ -304,6 +304,8 @@ enum QuietAppearanceMode: String, CaseIterable, Identifiable {
     case light
     case dark
 
+    static let defaultMode: QuietAppearanceMode = .dark
+
     var id: String { rawValue }
 
     var colorScheme: ColorScheme? {
@@ -329,7 +331,7 @@ enum QuietAppearanceMode: String, CaseIterable, Identifiable {
     }
 
     static func normalized(_ raw: String?) -> QuietAppearanceMode {
-        QuietAppearanceMode(rawValue: raw ?? "") ?? .system
+        QuietAppearanceMode(rawValue: raw ?? "") ?? defaultMode
     }
 }
 
