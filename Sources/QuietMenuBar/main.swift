@@ -6,7 +6,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 private let quietAppName = "Quiet"
-private let quietWindowDefaultSize = NSSize(width: 380, height: 520)
+private let quietWindowDefaultSize = NSSize(width: 382, height: 497)
 private let quietWindowMinimumSize = NSSize(width: 340, height: 420)
 private let quietDesktopWindowDefaultSize = NSSize(width: 820, height: 540)
 private let quietDesktopWindowMinimumSize = NSSize(width: 640, height: 440)
