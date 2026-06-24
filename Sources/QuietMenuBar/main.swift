@@ -485,6 +485,191 @@ struct ModelProviderOption: Identifiable, Equatable {
     let models: [AvailableModel]
 }
 
+struct ComputerMetricCard: Identifiable, Equatable {
+    let id: String
+    let title: String
+    let value: String
+    let detail: String
+    let iconId: String
+    let fallbackSystemName: String
+}
+
+struct ComputerMetricsSnapshot: Equatable {
+    var cpuPercent = "--"
+    var memory = "--"
+    var network = "--"
+    var storage = "--"
+
+    var cards: [ComputerMetricCard] {
+        [
+            ComputerMetricCard(
+                id: "cpu",
+                title: "CPU",
+                value: cpuPercent,
+                detail: "当前负载",
+                iconId: "cpu",
+                fallbackSystemName: "cpu"
+            ),
+            ComputerMetricCard(
+                id: "memory",
+                title: "内存",
+                value: memory,
+                detail: "已使用",
+                iconId: "memory-stick",
+                fallbackSystemName: "memorychip"
+            ),
+            ComputerMetricCard(
+                id: "network",
+                title: "网络",
+                value: network,
+                detail: "实时流量",
+                iconId: "activity",
+                fallbackSystemName: "network"
+            ),
+            ComputerMetricCard(
+                id: "storage",
+                title: "存储",
+                value: storage,
+                detail: "系统盘",
+                iconId: "hard-drive",
+                fallbackSystemName: "internaldrive"
+            ),
+        ]
+    }
+}
+
+@MainActor
+final class ComputerMetricsStore: ObservableObject {
+    @Published private(set) var snapshot = ComputerMetricsSnapshot()
+
+    private var refreshTask: Task<Void, Never>?
+    private var lastNetworkBytes: Double?
+    private var lastNetworkSampleAt: Date?
+
+    deinit {
+        refreshTask?.cancel()
+    }
+
+    func start() {
+        guard refreshTask == nil else { return }
+        refreshTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                await self.refresh()
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+        }
+    }
+
+    private func refresh() async {
+        let previousNetworkBytes = lastNetworkBytes
+        let previousNetworkSampleAt = lastNetworkSampleAt
+        let sample = await Task.detached(priority: .utility) {
+            ComputerMetricsSampler.collect(
+                previousNetworkBytes: previousNetworkBytes,
+                previousNetworkSampleAt: previousNetworkSampleAt
+            )
+        }.value
+
+        snapshot = sample.snapshot
+        lastNetworkBytes = sample.networkBytes
+        lastNetworkSampleAt = sample.sampledAt
+    }
+}
+
+private struct ComputerMetricsSample {
+    let snapshot: ComputerMetricsSnapshot
+    let networkBytes: Double?
+    let sampledAt: Date
+}
+
+private enum ComputerMetricsSampler {
+    static func collect(previousNetworkBytes: Double?, previousNetworkSampleAt: Date?) -> ComputerMetricsSample {
+        let sampledAt = Date()
+        let cpu = commandOutput("""
+cores=$(/usr/sbin/sysctl -n hw.logicalcpu 2>/dev/null)
+cores=${cores:-1}
+/bin/ps -A -o %cpu= 2>/dev/null | /usr/bin/awk -v c="$cores" '{ total += $1 } END { printf "%.0f%%", total / c }'
+""")
+
+        let memory = commandOutput("""
+page_size=$(/usr/bin/vm_stat 2>/dev/null | /usr/bin/awk '/page size of/ { gsub("[^0-9]", "", $8); print $8 }')
+page_size=${page_size:-4096}
+total=$(/usr/sbin/sysctl -n hw.memsize 2>/dev/null)
+used=$(/usr/bin/vm_stat 2>/dev/null | /usr/bin/awk -v p="$page_size" '/Pages active|Pages wired down|Pages occupied by compressor/ { gsub("\\\\.", "", $NF); used += $NF * p } END { printf "%.0f", used }')
+/usr/bin/awk -v used="$used" -v total="$total" 'BEGIN { printf "%.1f / %.0f GB", used / 1073741824, total / 1073741824 }'
+""")
+
+        let networkBytesText = commandOutput("""
+/usr/sbin/netstat -ibn 2>/dev/null | /usr/bin/awk '$1 != "lo0" && $7 ~ /^[0-9]+$/ && $10 ~ /^[0-9]+$/ { bytes += $7 + $10 } END { printf "%.0f", bytes }'
+""")
+        let networkBytes = Double(networkBytesText.trimmingCharacters(in: .whitespacesAndNewlines))
+        let network = networkRateText(
+            currentBytes: networkBytes,
+            sampledAt: sampledAt,
+            previousBytes: previousNetworkBytes,
+            previousSampledAt: previousNetworkSampleAt
+        )
+
+        let storage = commandOutput("""
+/bin/df -k / 2>/dev/null | /usr/bin/awk 'NR == 2 { gsub("%", "", $5); printf "%s%%", $5 }'
+""")
+
+        return ComputerMetricsSample(
+            snapshot: ComputerMetricsSnapshot(
+                cpuPercent: metricText(cpu),
+                memory: metricText(memory),
+                network: network,
+                storage: metricText(storage)
+            ),
+            networkBytes: networkBytes,
+            sampledAt: sampledAt
+        )
+    }
+
+    private static func commandOutput(_ command: String) -> String {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+        process.arguments = ["-lc", command]
+        process.standardOutput = output
+        process.standardError = Pipe()
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            return ""
+        }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        return String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    }
+
+    private static func metricText(_ value: String) -> String {
+        value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "--" : value
+    }
+
+    private static func networkRateText(
+        currentBytes: Double?,
+        sampledAt: Date,
+        previousBytes: Double?,
+        previousSampledAt: Date?
+    ) -> String {
+        guard let currentBytes,
+              let previousBytes,
+              let previousSampledAt else {
+            return "采样中"
+        }
+        let elapsed = sampledAt.timeIntervalSince(previousSampledAt)
+        guard elapsed > 0 else { return "0 KB/s" }
+        let bytesPerSecond = max(0, currentBytes - previousBytes) / elapsed
+        if bytesPerSecond >= 1_048_576 {
+            return String(format: "%.1f MB/s", bytesPerSecond / 1_048_576)
+        }
+        return String(format: "%.0f KB/s", bytesPerSecond / 1024)
+    }
+}
+
 private extension Notification.Name {
     static let quietFocusComposer = Notification.Name("QuietFocusComposer")
     static let quietRestoreFollowLatest = Notification.Name("QuietRestoreFollowLatest")
@@ -2067,6 +2252,7 @@ final class AgentStore: ObservableObject {
 
 struct QuietView: View {
     @StateObject private var store = AgentStore()
+    @StateObject private var computerMetrics = ComputerMetricsStore()
     @State private var isInputFocused = false
     @State private var scrollOffset: CGFloat = 0
     @State private var scrollContentHeight: CGFloat = 1
@@ -2322,10 +2508,9 @@ struct QuietView: View {
                             }
 
                             if store.messages.isEmpty && !store.isLoadingHistory && !store.showTurnWaitIndicator {
-                                EmptyConversationHint()
+                                EmptyConversationHint(metrics: computerMetrics.snapshot)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                                     .padding(.bottom, 28)
-                                    .allowsHitTesting(false)
                                     .transition(.opacity)
                             }
 
@@ -2372,6 +2557,9 @@ struct QuietView: View {
             }
         }
         .animation(.easeOut(duration: 0.14), value: isDropTargeted)
+        .onAppear {
+            computerMetrics.start()
+        }
     }
 
     private func updateScrollMetrics(offset: CGFloat, viewportHeight: CGFloat, contentHeight: CGFloat) {
@@ -2732,18 +2920,86 @@ struct QuietView: View {
 }
 
 struct EmptyConversationHint: View {
-    var body: some View {
-        VStack(spacing: 10) {
-            LucideIcon(id: "keyboard", fallbackSystemName: "keyboard")
-                .frame(width: 22, height: 22)
-                .foregroundStyle(quietChatMutedText.opacity(0.72))
+    let metrics: ComputerMetricsSnapshot
 
-            Text("使用 `Alt` + `Space` 快捷唤出 `Quiet`")
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(quietChatMutedText.opacity(0.86))
-                .multilineTextAlignment(.center)
+    private let columns = [
+        GridItem(.flexible(), spacing: 8),
+        GridItem(.flexible(), spacing: 8),
+    ]
+
+    var body: some View {
+        VStack(spacing: 14) {
+            VStack(spacing: 5) {
+                Text("文件整理助手 + 电脑管家")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(quietChatText.opacity(0.9))
+
+                Text("问我哪些应用最占内存，或直接拖入文件整理。")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(quietChatMutedText.opacity(0.86))
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(metrics.cards) { card in
+                    ComputerMetricTile(card: card)
+                }
+            }
+
+            HStack(spacing: 6) {
+                LucideIcon(id: "keyboard", fallbackSystemName: "keyboard")
+                    .frame(width: 14, height: 14)
+                    .foregroundStyle(quietChatMutedText.opacity(0.72))
+
+                Text("使用 `Alt` + `Space` 快捷唤出 `Quiet`")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(quietChatMutedText.opacity(0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
         }
-        .frame(maxWidth: 260)
+        .frame(maxWidth: 300)
+        .padding(.horizontal, 18)
+    }
+}
+
+struct ComputerMetricTile: View {
+    let card: ComputerMetricCard
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(spacing: 6) {
+                LucideIcon(id: card.iconId, fallbackSystemName: card.fallbackSystemName)
+                    .frame(width: 14, height: 14)
+                    .foregroundStyle(quietChatText.opacity(0.72))
+
+                Text(card.title)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(quietChatMutedText.opacity(0.9))
+                    .lineLimit(1)
+            }
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.value)
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(quietChatText.opacity(0.94))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
+
+                Text(card.detail)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(quietChatMutedText.opacity(0.72))
+                    .lineLimit(1)
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 76, alignment: .leading)
+        .padding(10)
+        .background(quietNonUserBubbleFill.opacity(0.64), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(quietNonUserBubbleBorder.opacity(0.72), lineWidth: 0.6)
+        }
     }
 }
 
