@@ -2946,18 +2946,6 @@ struct EmptyConversationHint: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack(spacing: 6) {
-                LucideIcon(id: "keyboard", fallbackSystemName: "keyboard")
-                    .frame(width: 14, height: 14)
-                    .foregroundStyle(quietChatMutedText.opacity(0.72))
-
-                Text("使用 `Alt` + `Space` 快捷唤出 `Quiet`")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(quietChatMutedText.opacity(0.78))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
-            }
-
             LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(metrics.cards) { card in
                     ComputerMetricTile(card: card)
@@ -2973,6 +2961,17 @@ struct EmptyConversationHint: View {
             }
             .padding(.top, 1)
 
+            HStack(spacing: 6) {
+                LucideIcon(id: "keyboard", fallbackSystemName: "keyboard")
+                    .frame(width: 14, height: 14)
+                    .foregroundStyle(quietChatMutedText.opacity(0.72))
+
+                Text("使用 `Alt` + `Space` 快捷唤出 `Quiet`")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(quietChatMutedText.opacity(0.78))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
         }
         .frame(maxWidth: 300)
         .padding(.horizontal, 18)
