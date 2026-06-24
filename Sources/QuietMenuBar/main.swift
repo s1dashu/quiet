@@ -1158,6 +1158,7 @@ final class AgentStore: ObservableObject {
 
     private var process: Process?
     private var inputPipe: Pipe?
+    private var inputWriteHandle: FileHandle?
     private var outputBuffer = Data()
     private var assistantMessageIdsByAgentId: [String: String] = [:]
     private var toolMessageIdsByToolId: [String: String] = [:]
@@ -1329,6 +1330,7 @@ final class AgentStore: ObservableObject {
     private func startAgent() {
         guard let agentURL = bundledResourceURL(path: "pi-agent/server.mjs") else {
             status = "\(copy.launchFailedPrefix): agent/server.mjs"
+            appendNativeAgentLog("missing agent/server.mjs")
             return
         }
 
@@ -1337,13 +1339,14 @@ final class AgentStore: ObservableObject {
         let outputPipe = Pipe()
         let errorPipe = Pipe()
 
-        if let bundledNode = bundledNodeURL() {
-            process.executableURL = bundledNode
+        if let nodeURL = bundledNodeURL() ?? developerNodeURL() {
+            process.executableURL = nodeURL
             process.arguments = [agentURL.path]
         } else {
             process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
             process.arguments = ["node", agentURL.path]
         }
+        appendNativeAgentLog("starting agent executable=\(process.executableURL?.path ?? "") args=\(process.arguments?.joined(separator: " ") ?? "")")
         if let projectDirectory = projectDirectoryURL() {
             process.currentDirectoryURL = projectDirectory
         }
@@ -1390,14 +1393,17 @@ final class AgentStore: ObservableObject {
             }
             guard let text = String(data: data, encoding: .utf8) else { return }
             Task { @MainActor in
+                self?.appendNativeAgentLog("stderr: \(text.trimmingCharacters(in: .whitespacesAndNewlines))")
                 self?.status = "agent stderr: \(text.trimmingCharacters(in: .whitespacesAndNewlines))"
             }
         }
 
         process.terminationHandler = { [weak self] process in
             Task { @MainActor in
+                self?.appendNativeAgentLog("agent exited status=\(process.terminationStatus) reason=\(process.terminationReason.rawValue)")
                 guard self?.isRestartingAgent != true else { return }
                 self?.inputPipe = nil
+                self?.inputWriteHandle = nil
                 self?.process = nil
                 self?.isAgentReady = false
                 self?.isAgentWorking = false
@@ -1410,12 +1416,31 @@ final class AgentStore: ObservableObject {
             try process.run()
             self.process = process
             self.inputPipe = inputPipe
+            self.inputWriteHandle = inputPipe.fileHandleForWriting
             isRestartingAgent = false
             status = copy.connectingStatus
+            appendNativeAgentLog("agent process started pid=\(process.processIdentifier)")
         } catch {
             isRestartingAgent = false
             status = "\(copy.launchFailedPrefix): \(error.localizedDescription)"
+            appendNativeAgentLog("launch failed: \(error.localizedDescription)")
             messages.append(ChatMessage(id: UUID().uuidString, role: .system, text: status))
+        }
+    }
+
+    private func appendNativeAgentLog(_ message: String) {
+        let logURL = applicationSupportDirectory()
+            .appendingPathComponent("logs", isDirectory: true)
+            .appendingPathComponent("native-agent.log", isDirectory: false)
+        try? FileManager.default.createDirectory(at: logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"
+        if let data = line.data(using: .utf8),
+           let handle = try? FileHandle(forWritingTo: logURL) {
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data)
+            try? handle.close()
+        } else {
+            try? line.write(to: logURL, atomically: true, encoding: .utf8)
         }
     }
 
@@ -1450,7 +1475,7 @@ final class AgentStore: ObservableObject {
     private func writeJSONLine(_ payload: [String: Any]) -> Bool {
         guard let process,
               process.isRunning,
-              let inputPipe else {
+              let inputWriteHandle else {
             markAgentConnectionUnavailable("not running")
             return false
         }
@@ -1463,7 +1488,7 @@ final class AgentStore: ObservableObject {
         let lineData = Data(line.utf8)
         let result = lineData.withUnsafeBytes { bytes -> Int in
             guard let baseAddress = bytes.baseAddress else { return 0 }
-            return Darwin.write(inputPipe.fileHandleForWriting.fileDescriptor, baseAddress, bytes.count)
+            return Darwin.write(inputWriteHandle.fileDescriptor, baseAddress, bytes.count)
         }
         if result != lineData.count {
             markAgentConnectionUnavailable("write failed")
@@ -1474,6 +1499,7 @@ final class AgentStore: ObservableObject {
 
     private func markAgentConnectionUnavailable(_ reason: String) {
         inputPipe = nil
+        inputWriteHandle = nil
         process = nil
         isAgentReady = false
         isAgentWorking = false
@@ -1861,6 +1887,43 @@ final class AgentStore: ObservableObject {
         return candidates.compactMap { $0 }.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }
 
+    private func developerNodeURL() -> URL? {
+        let environment = ProcessInfo.processInfo.environment
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser.path
+        let pathCandidates: [String] = [
+            environment["QUIET_NODE_PATH"],
+            environment["NODE_BINARY"],
+            nodePathFromInheritedPath(environment["PATH"])?.path,
+            "\(homeDirectory)/.local/share/mise/shims/node",
+            "\(homeDirectory)/.local/share/mise/installs/node/lts/bin/node",
+            "\(homeDirectory)/.asdf/shims/node",
+            "\(homeDirectory)/.nvm/current/bin/node",
+            "/opt/homebrew/bin/node",
+            "/usr/local/bin/node",
+            "/usr/bin/node",
+        ].compactMap { $0 }
+        if let directMatch = pathCandidates.compactMap({ executableURL(path: $0) }).first {
+            return directMatch
+        }
+        return nil
+    }
+
+    private func nodePathFromInheritedPath(_ pathValue: String?) -> URL? {
+        pathValue?
+            .split(separator: ":")
+            .map(String.init)
+            .compactMap { directory in
+                executableURL(path: URL(fileURLWithPath: directory).appendingPathComponent("node").path)
+            }
+            .first
+    }
+
+    private func executableURL(path: String) -> URL? {
+        let expandedPath = (path as NSString).expandingTildeInPath
+        guard FileManager.default.isExecutableFile(atPath: expandedPath) else { return nil }
+        return URL(fileURLWithPath: expandedPath)
+    }
+
     private func bundledResourceURL(path: String) -> URL? {
         let bundleName = "Quiet_QuietMenuBar.bundle"
         let candidates = [
@@ -1875,7 +1938,12 @@ final class AgentStore: ObservableObject {
     }
 
     private func mergedPath() -> String {
+        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser.path
         let defaults = [
+            "\(homeDirectory)/.local/share/mise/shims",
+            "\(homeDirectory)/.local/share/mise/installs/node/lts/bin",
+            "\(homeDirectory)/.asdf/shims",
+            "\(homeDirectory)/.nvm/current/bin",
             "/opt/homebrew/bin",
             "/usr/local/bin",
             "/usr/bin",
@@ -2282,6 +2350,7 @@ final class AgentStore: ObservableObject {
         showTurnWaitIndicator = false
         status = copy.switchingModelStatus
         inputPipe = nil
+        inputWriteHandle = nil
         process?.terminate()
         process = nil
         startAgent()
