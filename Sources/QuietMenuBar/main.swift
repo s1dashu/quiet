@@ -21,6 +21,7 @@ private let quietContentDirectoryName = "Quiet"
 private let quietLegacyContentDirectoryName = "Blackhole"
 private let messageBottomAnchorId = "message-bottom-anchor"
 private let quietAppearanceModeKey = "quiet.appearance.mode"
+private let quietKeyboardShortcutKey = "quiet.keyboardShortcut"
 private let quietLegacyModelApiKeyKey = "quiet.model.apiKey"
 private let quietDropTypeIdentifiers = [
     UTType.fileURL.identifier,
@@ -335,6 +336,113 @@ enum QuietAppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
+struct QuietKeyboardShortcut: Equatable {
+    enum CaptureResult {
+        case success(QuietKeyboardShortcut)
+        case failure(String)
+    }
+
+    let keyCode: UInt32
+    let modifiers: UInt32
+
+    static let defaultShortcut = QuietKeyboardShortcut(keyCode: UInt32(kVK_Space), modifiers: UInt32(optionKey))
+
+    init(keyCode: UInt32, modifiers: UInt32) {
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+    }
+
+    init?(rawValue: String?) {
+        guard let rawValue,
+              !rawValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        let parts = rawValue.split(separator: ":")
+        guard parts.count == 2,
+              let keyCode = UInt32(parts[0]),
+              let modifiers = UInt32(parts[1]) else {
+            return nil
+        }
+        self.keyCode = keyCode
+        self.modifiers = modifiers
+    }
+
+    var rawValue: String {
+        "\(keyCode):\(modifiers)"
+    }
+
+    var displayTitle: String {
+        "\(modifierDisplay)\(keyDisplayName(for: keyCode))"
+    }
+
+    var isValidForGlobalRegistration: Bool {
+        keyCode > 0 && modifiers > 0
+    }
+
+    static func stored() -> QuietKeyboardShortcut {
+        QuietKeyboardShortcut(rawValue: UserDefaults.standard.string(forKey: quietKeyboardShortcutKey))
+            ?? .defaultShortcut
+    }
+
+    static func fromEvent(_ event: NSEvent) -> CaptureResult {
+        let keyCode = UInt32(event.keyCode)
+        if modifierOnlyKeyCodes.contains(keyCode) {
+            return .failure("请按下修饰键加一个普通按键。")
+        }
+
+        let modifiers = carbonModifiers(from: event.modifierFlags)
+        let requiredModifiers = UInt32(optionKey | controlKey)
+        guard modifiers & requiredModifiers != 0 else {
+            return .failure("请至少包含 Option 或 Control，避免覆盖常用快捷键。")
+        }
+
+        return .success(QuietKeyboardShortcut(keyCode: keyCode, modifiers: modifiers))
+    }
+
+    private var modifierDisplay: String {
+        var parts: [String] = []
+        if modifiers & UInt32(controlKey) != 0 { parts.append("⌃") }
+        if modifiers & UInt32(optionKey) != 0 { parts.append("⌥") }
+        if modifiers & UInt32(shiftKey) != 0 { parts.append("⇧") }
+        if modifiers & UInt32(cmdKey) != 0 { parts.append("⌘") }
+        return parts.joined(separator: " ")
+            .appending(parts.isEmpty ? "" : " ")
+    }
+
+    private static func carbonModifiers(from flags: NSEvent.ModifierFlags) -> UInt32 {
+        let normalized = flags.intersection(.deviceIndependentFlagsMask)
+        var modifiers: UInt32 = 0
+        if normalized.contains(.command) { modifiers |= UInt32(cmdKey) }
+        if normalized.contains(.shift) { modifiers |= UInt32(shiftKey) }
+        if normalized.contains(.option) { modifiers |= UInt32(optionKey) }
+        if normalized.contains(.control) { modifiers |= UInt32(controlKey) }
+        return modifiers
+    }
+
+    private static let modifierOnlyKeyCodes = Set<UInt32>([54, 55, 56, 57, 58, 59, 60, 61, 62])
+
+    private func keyDisplayName(for keyCode: UInt32) -> String {
+        Self.keyDisplayNames[keyCode] ?? "Key \(keyCode)"
+    }
+
+    private static let keyDisplayNames: [UInt32: String] = [
+        0: "A", 1: "S", 2: "D", 3: "F", 4: "H", 5: "G", 6: "Z", 7: "X",
+        8: "C", 9: "V", 11: "B", 12: "Q", 13: "W", 14: "E", 15: "R", 16: "Y",
+        17: "T", 18: "1", 19: "2", 20: "3", 21: "4", 22: "6", 23: "5", 24: "=",
+        25: "9", 26: "7", 27: "-", 28: "8", 29: "0", 30: "]", 31: "O", 32: "U",
+        33: "[", 34: "I", 35: "P", 36: "Return", 37: "L", 38: "J", 39: "'",
+        40: "K", 41: ";", 42: "\\", 43: ",", 44: "/", 45: "N", 46: "M", 47: ".",
+        48: "Tab", 49: "Space", 50: "`", 51: "Delete", 53: "Esc",
+        65: ".", 67: "*", 69: "+", 71: "Clear", 75: "/", 76: "Enter", 78: "-",
+        81: "=", 82: "0", 83: "1", 84: "2", 85: "3", 86: "4", 87: "5", 88: "6",
+        89: "7", 91: "8", 92: "9", 96: "F5", 97: "F6", 98: "F7", 99: "F3",
+        100: "F8", 101: "F9", 103: "F11", 105: "F13", 106: "F16", 107: "F14",
+        109: "F10", 111: "F12", 113: "F15", 114: "Help", 115: "Home",
+        116: "Page Up", 117: "Forward Delete", 118: "F4", 119: "End", 120: "F2",
+        121: "Page Down", 122: "F1", 123: "←", 124: "→", 125: "↓", 126: "↑",
+    ]
+}
+
 struct QuietCopy {
     let initialMessage: String
     let startingStatus: String
@@ -359,6 +467,10 @@ struct QuietCopy {
     let apiKeyPlaceholder: String
     let thinking: String
     let appearance: String
+    let keyboardShortcut: String
+    let keyboardShortcutHelp: String
+    let keyboardShortcutRecording: String
+    let keyboardShortcutReset: String
     let appearanceSystem: String
     let appearanceLight: String
     let appearanceDark: String
@@ -406,6 +518,10 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             apiKeyPlaceholder: "Use environment key or paste one here",
             thinking: "Thinking",
             appearance: "Appearance",
+            keyboardShortcut: "Toggle shortcut",
+            keyboardShortcutHelp: "Click, then press a shortcut. Esc cancels.",
+            keyboardShortcutRecording: "Press shortcut...",
+            keyboardShortcutReset: "Reset",
             appearanceSystem: "Follow System",
             appearanceLight: "Light",
             appearanceDark: "Dark",
@@ -450,6 +566,10 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             apiKeyPlaceholder: "使用环境变量，或在这里填入",
             thinking: "Thinking",
             appearance: "外观",
+            keyboardShortcut: "唤出快捷键",
+            keyboardShortcutHelp: "点击后直接按下快捷键，Esc 取消",
+            keyboardShortcutRecording: "请按下快捷键...",
+            keyboardShortcutReset: "恢复默认",
             appearanceSystem: "跟随系统",
             appearanceLight: "浅色",
             appearanceDark: "深色",
@@ -676,6 +796,8 @@ private extension Notification.Name {
     static let quietFocusComposer = Notification.Name("QuietFocusComposer")
     static let quietRestoreFollowLatest = Notification.Name("QuietRestoreFollowLatest")
     static let quietAppearanceDidChange = Notification.Name("QuietAppearanceDidChange")
+    static let quietKeyboardShortcutDidChange = Notification.Name("QuietKeyboardShortcutDidChange")
+    static let quietKeyboardShortcutRecordingDidChange = Notification.Name("QuietKeyboardShortcutRecordingDidChange")
     static let quietOpenDesktopClient = Notification.Name("QuietOpenDesktopClient")
     static let quietWindowChromeModeDidChange = Notification.Name("QuietWindowChromeModeDidChange")
 }
@@ -1023,6 +1145,7 @@ final class AgentStore: ObservableObject {
     @Published var modelApiKey: String
     @Published var thinkingLevel: String
     @Published var appearanceMode: QuietAppearanceMode
+    @Published var keyboardShortcut: QuietKeyboardShortcut
     @Published var modelProviders: [ModelProviderOption] = []
     @Published var sessions: [QuietSessionSummary] = []
     @Published var currentSessionPath = ""
@@ -1061,6 +1184,7 @@ final class AgentStore: ObservableObject {
         }
         thinkingLevel = UserDefaults.standard.string(forKey: "quiet.thinking.level") ?? "medium"
         appearanceMode = QuietAppearanceMode.normalized(UserDefaults.standard.string(forKey: quietAppearanceModeKey))
+        keyboardShortcut = QuietKeyboardShortcut.stored()
         status = copy.startingStatus
         messages = []
         startAgent()
@@ -2077,18 +2201,25 @@ final class AgentStore: ObservableObject {
         NotificationCenter.default.post(name: .quietAppearanceDidChange, object: mode.rawValue)
     }
 
+    func applyKeyboardShortcut(_ shortcut: QuietKeyboardShortcut) {
+        keyboardShortcut = shortcut
+        UserDefaults.standard.set(shortcut.rawValue, forKey: quietKeyboardShortcutKey)
+        NotificationCenter.default.post(name: .quietKeyboardShortcutDidChange, object: shortcut.rawValue)
+    }
+
     func applyLanguage(_ nextLanguage: QuietLanguage) {
         language = nextLanguage.rawValue
         UserDefaults.standard.set(language, forKey: "quiet.language")
     }
 
-    func saveSettings(language: String, provider: String, model: String, apiKey: String, thinking: String, appearance: String) {
+    func saveSettings(language: String, provider: String, model: String, apiKey: String, thinking: String, appearance: String, keyboardShortcutRawValue: String) {
         let nextLanguage = QuietLanguage.normalized(language)
         let nextProvider = provider.trimmingCharacters(in: .whitespacesAndNewlines)
         let nextModel = model.trimmingCharacters(in: .whitespacesAndNewlines)
         let nextApiKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         let nextThinking = clampedThinkingLevel(thinking, forProvider: nextProvider, modelId: nextModel)
         let nextAppearance = QuietAppearanceMode.normalized(appearance)
+        let nextKeyboardShortcut = QuietKeyboardShortcut(rawValue: keyboardShortcutRawValue) ?? .defaultShortcut
         guard !nextProvider.isEmpty, !nextModel.isEmpty else { return }
 
         let shouldRestart = modelProvider != nextProvider
@@ -2102,6 +2233,7 @@ final class AgentStore: ObservableObject {
         modelApiKey = nextApiKey
         thinkingLevel = nextThinking
         applyAppearanceMode(nextAppearance)
+        applyKeyboardShortcut(nextKeyboardShortcut)
         UserDefaults.standard.set(modelProvider, forKey: "quiet.model.provider")
         UserDefaults.standard.set(modelId, forKey: "quiet.model.id")
         QuietSecrets.saveModelApiKey(modelApiKey)
@@ -2512,6 +2644,7 @@ struct QuietView: View {
                             if store.messages.isEmpty && !store.isLoadingHistory && !store.showTurnWaitIndicator {
                                 EmptyConversationHint(
                                     metrics: computerMetrics.snapshot,
+                                    shortcutTitle: store.keyboardShortcut.displayTitle,
                                     onPromptSelected: { prompt in
                                         store.inputText = prompt
                                         isInputFocused = true
@@ -2930,6 +3063,7 @@ struct QuietView: View {
 
 struct EmptyConversationHint: View {
     let metrics: ComputerMetricsSnapshot
+    let shortcutTitle: String
     let onPromptSelected: (String) -> Void
     @State private var currentTipIndex = 0
 
@@ -2938,23 +3072,25 @@ struct EmptyConversationHint: View {
         GridItem(.flexible(), spacing: 8),
     ]
 
-    private let tips: [EmptyStateTip] = [
-        EmptyStateTip(
-            iconId: "keyboard",
-            fallbackSystemName: "keyboard",
-            text: "使用 Alt + Space 快捷唤出 Quiet"
-        ),
-        EmptyStateTip(
-            iconId: "upload-cloud",
-            fallbackSystemName: "icloud.and.arrow.up",
-            text: "拖拽文件到 Quiet，Agent 将会自动为你整理"
-        ),
-        EmptyStateTip(
-            iconId: "sparkles",
-            fallbackSystemName: "sparkles",
-            text: "描述你的个人偏好，Agent 会记住它"
-        ),
-    ]
+    private var tips: [EmptyStateTip] {
+        [
+            EmptyStateTip(
+                iconId: "keyboard",
+                fallbackSystemName: "keyboard",
+                text: "使用 \(shortcutTitle) 快捷唤出 Quiet"
+            ),
+            EmptyStateTip(
+                iconId: "upload-cloud",
+                fallbackSystemName: "icloud.and.arrow.up",
+                text: "拖拽文件到 Quiet，Agent 将会自动为你整理"
+            ),
+            EmptyStateTip(
+                iconId: "sparkles",
+                fallbackSystemName: "sparkles",
+                text: "描述你的个人偏好，Agent 会记住它"
+            ),
+        ]
+    }
 
     private let promptSuggestions = [
         "帮我用 PARA 方法整理我的文件",
@@ -3192,8 +3328,7 @@ struct CredentialPromptOverlay: View {
                     options: modelOptions.map { (value: $0.modelId, label: $0.label) }
                 )
                 .onChange(of: model) { _, nextModel in
-                    let nextLevels = modelOptions.first(where: { $0.modelId == nextModel })?.thinkingLevels ?? ["off"]
-                    thinking = closestThinkingLevel(to: thinking, in: nextLevels)
+                    thinking = closestThinkingLevel(to: thinking, in: thinkingLevels(for: nextModel, in: modelOptions))
                 }
 
                 VStack(alignment: .leading, spacing: 5) {
@@ -3222,7 +3357,8 @@ struct CredentialPromptOverlay: View {
                         model: model,
                         apiKey: apiKey,
                         thinking: thinking,
-                        appearance: store.appearanceMode.rawValue
+                        appearance: store.appearanceMode.rawValue,
+                        keyboardShortcutRawValue: store.keyboardShortcut.rawValue
                     )
                     onSaved()
                 } label: {
@@ -3279,7 +3415,7 @@ struct CredentialPromptOverlay: View {
     }
 
     private var thinkingOptions: [(value: String, label: String)] {
-        let levels = modelOptions.first(where: { $0.modelId == model })?.thinkingLevels ?? ["off"]
+        let levels = thinkingLevels(for: model, in: modelOptions)
         return levels.map { (value: $0, label: thinkingLevelLabel($0)) }
     }
 
@@ -3307,7 +3443,13 @@ struct CredentialPromptOverlay: View {
         if !modelOptions.contains(where: { $0.modelId == model }) {
             model = modelOptions.first?.modelId ?? "deepseek-v4-flash"
         }
-        thinking = closestThinkingLevel(to: thinking, in: modelOptions.first(where: { $0.modelId == model })?.thinkingLevels ?? ["off"])
+        thinking = closestThinkingLevel(to: thinking, in: thinkingLevels(for: model, in: modelOptions))
+    }
+
+    private func thinkingLevels(for modelId: String, in options: [AvailableModel]) -> [String] {
+        options.first { option in
+            option.modelId == modelId
+        }?.thinkingLevels ?? ["off"]
     }
 
     private func thinkingLevelLabel(_ level: String) -> String {
@@ -3812,6 +3954,7 @@ struct SettingsPanel: View {
     @State private var apiKey: String
     @State private var thinking: String
     @State private var appearance: String
+    @State private var keyboardShortcutRawValue: String
     @FocusState private var focusedField: SettingsFocusTarget?
 
     init(store: AgentStore, focusApiKeyRequest: Int = 0, onClose: @escaping () -> Void) {
@@ -3824,6 +3967,7 @@ struct SettingsPanel: View {
         _apiKey = State(initialValue: store.modelApiKey)
         _thinking = State(initialValue: store.thinkingLevel)
         _appearance = State(initialValue: store.appearanceMode.rawValue)
+        _keyboardShortcutRawValue = State(initialValue: store.keyboardShortcut.rawValue)
     }
 
     var body: some View {
@@ -3866,6 +4010,17 @@ struct SettingsPanel: View {
                                 store.applyAppearanceMode(QuietAppearanceMode.normalized(nextAppearance))
                             }
 
+                        KeyboardShortcutSettingsField(
+                            title: copy.keyboardShortcut,
+                            help: copy.keyboardShortcutHelp,
+                            recordingLabel: copy.keyboardShortcutRecording,
+                            resetLabel: copy.keyboardShortcutReset,
+                            rawValue: $keyboardShortcutRawValue,
+                            onShortcutChange: { shortcut in
+                                store.applyKeyboardShortcut(shortcut)
+                            }
+                        )
+
                         modelSectionDivider
 
                         SettingsPickerField(
@@ -3885,7 +4040,10 @@ struct SettingsPanel: View {
                             options: modelOptions.isEmpty ? [(value: model, label: model)] : modelOptions.map { (value: $0.modelId, label: $0.label) }
                         )
                         .onChange(of: model) { _, nextModel in
-                            let nextLevels = modelOptions.first(where: { $0.modelId == nextModel })?.thinkingLevels ?? ["off"]
+                            let selectedModel = modelOptions.first { option in
+                                option.modelId == nextModel
+                            }
+                            let nextLevels = selectedModel?.thinkingLevels ?? ["off"]
                             thinking = closestThinkingLevel(to: thinking, in: nextLevels)
                         }
 
@@ -3893,7 +4051,15 @@ struct SettingsPanel: View {
                         SettingsPickerField(title: copy.thinking, selection: $thinking, options: thinkingOptions)
 
                         Button {
-                            store.saveSettings(language: language, provider: provider, model: model, apiKey: apiKey, thinking: thinking, appearance: appearance)
+                            store.saveSettings(
+                                language: language,
+                                provider: provider,
+                                model: model,
+                                apiKey: apiKey,
+                                thinking: thinking,
+                                appearance: appearance,
+                                keyboardShortcutRawValue: keyboardShortcutRawValue
+                            )
                             onClose()
                         } label: {
                             Text(copy.saveAndRestart)
@@ -4071,6 +4237,157 @@ struct SettingsField: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .stroke(quietSettingsControlBorder, lineWidth: 0.6)
             }
+        }
+    }
+}
+
+struct KeyboardShortcutSettingsField: View {
+    let title: String
+    let help: String
+    let recordingLabel: String
+    let resetLabel: String
+    @Binding var rawValue: String
+    let onShortcutChange: (QuietKeyboardShortcut) -> Void
+
+    @State private var isRecording = false
+    @State private var validationMessage: String?
+
+    private var shortcut: QuietKeyboardShortcut {
+        QuietKeyboardShortcut(rawValue: rawValue) ?? .defaultShortcut
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(quietSubtleText)
+
+            HStack(spacing: 8) {
+                Button {
+                    validationMessage = nil
+                    isRecording = true
+                } label: {
+                    HStack(spacing: 10) {
+                        LucideIcon(id: isRecording ? "circle-dot" : "keyboard", fallbackSystemName: "keyboard")
+                            .frame(width: 14, height: 14)
+                            .foregroundStyle(quietChatText.opacity(0.72))
+
+                        Text(isRecording ? recordingLabel : shortcut.displayTitle)
+                            .font(.system(size: 12.5, weight: .semibold))
+                            .foregroundStyle(quietNonUserMessageText)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+                    .contentShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .background(quietSettingsControlFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(isRecording ? quietChatText.opacity(0.34) : quietSettingsControlBorder, lineWidth: 0.8)
+                }
+
+                Button(resetLabel) {
+                    let defaultShortcut = QuietKeyboardShortcut.defaultShortcut
+                    rawValue = defaultShortcut.rawValue
+                    validationMessage = nil
+                    isRecording = false
+                    onShortcutChange(defaultShortcut)
+                }
+                .font(.system(size: 11.5, weight: .semibold))
+                .buttonStyle(.plain)
+                .foregroundStyle(quietChatText.opacity(0.78))
+                .padding(.horizontal, 10)
+                .frame(height: 34)
+                .background(quietHoverFill.opacity(0.62), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+
+            Text(validationMessage ?? help)
+                .font(.system(size: 10.5, weight: .medium))
+                .foregroundStyle(validationMessage == nil ? quietSubtleText.opacity(0.88) : Color.red.opacity(0.86))
+                .lineLimit(2)
+
+            KeyboardShortcutCaptureView(isRecording: $isRecording) { event in
+                handleCapturedEvent(event)
+            }
+            .frame(width: 0, height: 0)
+            .allowsHitTesting(false)
+        }
+        .onChange(of: isRecording) { _, recording in
+            NotificationCenter.default.post(name: .quietKeyboardShortcutRecordingDidChange, object: recording)
+        }
+        .onDisappear {
+            if isRecording {
+                isRecording = false
+                NotificationCenter.default.post(name: .quietKeyboardShortcutRecordingDidChange, object: false)
+            }
+        }
+    }
+
+    private func handleCapturedEvent(_ event: NSEvent) {
+        if event.keyCode == UInt16(kVK_Escape) {
+            validationMessage = nil
+            isRecording = false
+            return
+        }
+
+        switch QuietKeyboardShortcut.fromEvent(event) {
+        case .success(let shortcut):
+            rawValue = shortcut.rawValue
+            validationMessage = nil
+            isRecording = false
+            onShortcutChange(shortcut)
+        case .failure(let message):
+            validationMessage = message
+        }
+    }
+}
+
+struct KeyboardShortcutCaptureView: NSViewRepresentable {
+    @Binding var isRecording: Bool
+    let onKeyDown: (NSEvent) -> Void
+
+    func makeNSView(context: Context) -> KeyboardShortcutCaptureNSView {
+        let view = KeyboardShortcutCaptureNSView()
+        view.onKeyDown = onKeyDown
+        return view
+    }
+
+    func updateNSView(_ nsView: KeyboardShortcutCaptureNSView, context: Context) {
+        nsView.onKeyDown = onKeyDown
+        nsView.setRecording(isRecording)
+    }
+}
+
+@MainActor
+final class KeyboardShortcutCaptureNSView: NSView {
+    var onKeyDown: ((NSEvent) -> Void)?
+    private var monitor: EventMonitor?
+
+    deinit {
+        monitor = nil
+    }
+
+    func setRecording(_ isRecording: Bool) {
+        if isRecording {
+            attachMonitorIfNeeded()
+        } else {
+            monitor = nil
+        }
+    }
+
+    private func attachMonitorIfNeeded() {
+        guard monitor == nil else { return }
+        if let token = NSEvent.addLocalMonitorForEvents(matching: .keyDown, handler: { [weak self] event in
+            self?.onKeyDown?(event)
+            return nil
+        }) {
+            monitor = EventMonitor(token)
         }
     }
 }
@@ -4880,6 +5197,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private weak var chromeTintView: NSView?
     private weak var hostingView: NSView?
     private var appearanceObserver: NSObjectProtocol?
+    private var keyboardShortcutObserver: NSObjectProtocol?
+    private var keyboardShortcutRecordingObserver: NSObjectProtocol?
     private var desktopClientObserver: NSObjectProtocol?
     private var windowMode: WindowMode = .menuBar
     private var menuBarPresentationSource: MenuBarPresentationSource = .statusItem
@@ -5005,6 +5324,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
 
+        keyboardShortcutObserver = NotificationCenter.default.addObserver(
+            forName: .quietKeyboardShortcutDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let raw = notification.object as? String
+            Task { @MainActor in
+                self?.registerGlobalShortcut(QuietKeyboardShortcut(rawValue: raw) ?? .defaultShortcut)
+            }
+        }
+
+        keyboardShortcutRecordingObserver = NotificationCenter.default.addObserver(
+            forName: .quietKeyboardShortcutRecordingDidChange,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            let isRecording = (notification.object as? Bool) == true
+            Task { @MainActor in
+                if isRecording {
+                    self?.unregisterGlobalShortcut()
+                } else {
+                    self?.registerGlobalShortcut(QuietKeyboardShortcut.stored())
+                }
+            }
+        }
+
         desktopClientObserver = NotificationCenter.default.addObserver(
             forName: .quietOpenDesktopClient,
             object: nil,
@@ -5114,20 +5459,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
+        registerGlobalShortcut(QuietKeyboardShortcut.stored())
+    }
+
+    private func registerGlobalShortcut(_ shortcut: QuietKeyboardShortcut) {
+        unregisterGlobalShortcut()
+        guard shortcut.isValidForGlobalRegistration else { return }
+
         let hotKeyID = EventHotKeyID(
             signature: Self.shortcutHotKeySignature,
             id: Self.shortcutHotKeyID
         )
         let hotKeyStatus = RegisterEventHotKey(
-            UInt32(kVK_Space),
-            UInt32(optionKey),
+            shortcut.keyCode,
+            shortcut.modifiers,
             hotKeyID,
             GetApplicationEventTarget(),
             0,
             &shortcutHotKeyRef
         )
         if hotKeyStatus != noErr {
-            NSLog("Quiet failed to register Option-Space shortcut: \(hotKeyStatus)")
+            NSLog("Quiet failed to register global shortcut \(shortcut.displayTitle): \(hotKeyStatus)")
+        }
+    }
+
+    private func unregisterGlobalShortcut() {
+        if let shortcutHotKeyRef {
+            UnregisterEventHotKey(shortcutHotKeyRef)
+            self.shortcutHotKeyRef = nil
         }
     }
 
