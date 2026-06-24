@@ -462,7 +462,7 @@ func quietCopy(_ language: QuietLanguage) -> QuietCopy {
             openDesktopClient: "打开桌面客户端",
             openFiles: "打开文件夹",
             quit: "退出 Quiet",
-            composerPlaceholder: "粘贴链接、片段，或输入消息...",
+            composerPlaceholder: "拖入文件自动整理，或者输入消息...",
             dropOverlay: "松手捕获资源",
             statusTooltip: "\(quietAppName) - 拖入文件、链接或片段",
             unknownError: "未知错误",
