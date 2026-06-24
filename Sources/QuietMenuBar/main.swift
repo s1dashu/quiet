@@ -2932,7 +2932,7 @@ struct EmptyConversationHint: View {
     var body: some View {
         VStack(spacing: 14) {
             VStack(spacing: 5) {
-                Text("文件整理助手 + 电脑管家")
+                Text("Quiet 电脑管家")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(quietChatText.opacity(0.9))
 
