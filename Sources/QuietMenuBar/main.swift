@@ -3095,7 +3095,7 @@ struct EmptyConversationHint: View {
     private let promptSuggestions = [
         "帮我用 PARA 方法整理我的文件",
         "看看我电脑上有哪些可以清理的冗余文件？",
-        "帮我将我的 JPG 文件转成 PNG 格式",
+        "帮我将 JPG 文件转成 PNG 格式",
         "帮我将 MP3 格式文件改成默认用 IINA 打开",
     ]
 
