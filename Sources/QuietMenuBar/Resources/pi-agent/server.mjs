@@ -9,6 +9,7 @@ import {
   renameSync,
   rmSync,
   statSync,
+  appendFileSync,
   writeFileSync,
 } from "node:fs";
 import { rename } from "node:fs/promises";
@@ -547,9 +548,64 @@ const toolIdsByContentIndex = new Map();
 const startedToolIds = new Set();
 let fallbackNoticeSent = false;
 let sessionListRefreshTimer;
+let activeTurnLatency;
 
 function emit(event) {
   process.stdout.write(`${JSON.stringify(event)}\n`);
+}
+
+function startTurnLatency({ text, paths, resources }) {
+  activeTurnLatency = {
+    id: randomUUID(),
+    receivedAt: Date.now(),
+    promptStartedAt: 0,
+    firstThinkingAt: 0,
+    firstTextAt: 0,
+    firstDeltaAt: 0,
+    endedAt: 0,
+    textChars: [...text].length,
+    pathCount: paths.length,
+    resourceCount: resources.length,
+    sessionPath: currentSession?.sessionFile || "",
+  };
+}
+
+function markTurnLatency(field) {
+  if (!activeTurnLatency || activeTurnLatency[field]) return;
+  activeTurnLatency[field] = Date.now();
+}
+
+function finishTurnLatency(sessionContext = {}) {
+  if (!activeTurnLatency) return;
+  markTurnLatency("endedAt");
+  const metric = {
+    type: "turn_latency",
+    id: activeTurnLatency.id,
+    timestamp: new Date(activeTurnLatency.endedAt).toISOString(),
+    sessionPath: sessionContext.sessionPath || activeTurnLatency.sessionPath || currentSession?.sessionFile || "",
+    textChars: activeTurnLatency.textChars,
+    pathCount: activeTurnLatency.pathCount,
+    resourceCount: activeTurnLatency.resourceCount,
+    promptStartMs: activeTurnLatency.promptStartedAt
+      ? activeTurnLatency.promptStartedAt - activeTurnLatency.receivedAt
+      : null,
+    firstThinkingMs: activeTurnLatency.firstThinkingAt
+      ? activeTurnLatency.firstThinkingAt - activeTurnLatency.receivedAt
+      : null,
+    firstTextMs: activeTurnLatency.firstTextAt
+      ? activeTurnLatency.firstTextAt - activeTurnLatency.receivedAt
+      : null,
+    firstDeltaMs: activeTurnLatency.firstDeltaAt
+      ? activeTurnLatency.firstDeltaAt - activeTurnLatency.receivedAt
+      : null,
+    totalMs: activeTurnLatency.endedAt - activeTurnLatency.receivedAt,
+  };
+  activeTurnLatency = undefined;
+  try {
+    appendFileSync(join(logDir, "latency.jsonl"), `${JSON.stringify(metric)}\n`, "utf8");
+  } catch {
+    // Latency logging is best-effort and must never affect agent replies.
+  }
 }
 
 function displayToolId(providerToolCallId, fallbackId) {
@@ -1196,6 +1252,7 @@ function translateAgentEvent(event, sessionContext = {}) {
   if (event.type === "message_end") {
     if (event.message?.role === "assistant") {
       scheduleSessionListRefresh();
+      finishTurnLatency(sessionContext);
     }
     return;
   }
@@ -1237,11 +1294,13 @@ function translateAgentEvent(event, sessionContext = {}) {
   }
 
   if (messageEvent.type === "text_start") {
+    markTurnLatency("firstTextAt");
     currentAssistantId = randomUUID();
     emitSessionEvent({ type: "assistant_start", id: currentAssistantId, timestamp });
     return;
   }
   if (messageEvent.type === "text_delta") {
+    markTurnLatency("firstDeltaAt");
     currentAssistantId ||= randomUUID();
     emitSessionEvent({ type: "assistant_delta", id: currentAssistantId, text: messageEvent.delta || "", timestamp });
     return;
@@ -1253,6 +1312,7 @@ function translateAgentEvent(event, sessionContext = {}) {
     return;
   }
   if (messageEvent.type === "thinking_start") {
+    markTurnLatency("firstThinkingAt");
     currentThinkingId = randomUUID();
     emitSessionEvent({ type: "thinking_start", id: currentThinkingId, timestamp });
     return;
@@ -1353,6 +1413,7 @@ async function handleUserMessage(message) {
         }))
         .filter((resource) => resource.value.trim())
     : [];
+  startTurnLatency({ text, paths, resources });
 
   if (paths.length > 0 || resources.length > 0) {
     emit({ type: "status", value: `正在移入 00.01 Inbox：${paths.length + resources.length} 项` });
@@ -1386,6 +1447,7 @@ async function handleUserMessage(message) {
     });
     const session = await getPiSession();
     try {
+      markTurnLatency("promptStartedAt");
       await session.prompt(buildOrganizePrompt(inboxPaths, text), { source: "interactive" });
     } finally {
       writeSystemArchiveRecord({
@@ -1401,6 +1463,7 @@ async function handleUserMessage(message) {
   }
 
   const session = await getPiSession();
+  markTurnLatency("promptStartedAt");
   await session.prompt(text || `${copy.explainFallback} Quiet root=${filesDir}.`, {
     source: "interactive",
   });
