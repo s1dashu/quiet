@@ -2933,8 +2933,6 @@ struct EmptyConversationHint: View {
     let onPromptSelected: (String) -> Void
     @State private var currentTipIndex = 0
 
-    private let tipTimer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
-
     private let columns = [
         GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8),
@@ -2944,7 +2942,7 @@ struct EmptyConversationHint: View {
         EmptyStateTip(
             iconId: "keyboard",
             fallbackSystemName: "keyboard",
-            text: "使用 `Alt` + `Space` 快捷唤出 `Quiet`"
+            text: "使用 Alt + Space 快捷唤出 Quiet"
         ),
         EmptyStateTip(
             iconId: "upload-cloud",
@@ -2990,10 +2988,14 @@ struct EmptyConversationHint: View {
         }
         .frame(maxWidth: 300)
         .padding(.horizontal, 18)
-        .onReceive(tipTimer) { _ in
+        .task {
             guard tips.count > 1 else { return }
-            withAnimation(.easeInOut(duration: 0.24)) {
-                currentTipIndex = (currentTipIndex + 1) % tips.count
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 4_000_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation(.easeInOut(duration: 0.24)) {
+                    currentTipIndex = (currentTipIndex + 1) % tips.count
+                }
             }
         }
     }
