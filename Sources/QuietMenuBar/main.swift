@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import Darwin
 import LucideIcons
 import MarkdownUI
 import SwiftUI
@@ -1396,7 +1397,11 @@ final class AgentStore: ObservableObject {
         process.terminationHandler = { [weak self] process in
             Task { @MainActor in
                 guard self?.isRestartingAgent != true else { return }
+                self?.inputPipe = nil
+                self?.process = nil
                 self?.isAgentReady = false
+                self?.isAgentWorking = false
+                self?.updateTurnWaitIndicator()
                 self?.status = "\(self?.copy.agentExitedPrefix ?? "Agent exited"): \(process.terminationStatus)"
             }
         }
@@ -1436,18 +1441,44 @@ final class AgentStore: ObservableObject {
         ]
         isAgentWorking = true
         updateTurnWaitIndicator()
-        writeJSONLine(payload)
+        if !writeJSONLine(payload) {
+            messages.append(ChatMessage(id: UUID().uuidString, role: .system, text: "\(copy.agentErrorPrefix): agent is not connected"))
+        }
     }
 
-    private func writeJSONLine(_ payload: [String: Any]) {
-        guard let inputPipe else { return }
+    @discardableResult
+    private func writeJSONLine(_ payload: [String: Any]) -> Bool {
+        guard let process,
+              process.isRunning,
+              let inputPipe else {
+            markAgentConnectionUnavailable("not running")
+            return false
+        }
         guard JSONSerialization.isValidJSONObject(payload),
               let data = try? JSONSerialization.data(withJSONObject: payload),
               var line = String(data: data, encoding: .utf8) else {
-            return
+            return false
         }
         line.append("\n")
-        inputPipe.fileHandleForWriting.write(Data(line.utf8))
+        let lineData = Data(line.utf8)
+        let result = lineData.withUnsafeBytes { bytes -> Int in
+            guard let baseAddress = bytes.baseAddress else { return 0 }
+            return Darwin.write(inputPipe.fileHandleForWriting.fileDescriptor, baseAddress, bytes.count)
+        }
+        if result != lineData.count {
+            markAgentConnectionUnavailable("write failed")
+            return false
+        }
+        return true
+    }
+
+    private func markAgentConnectionUnavailable(_ reason: String) {
+        inputPipe = nil
+        process = nil
+        isAgentReady = false
+        isAgentWorking = false
+        updateTurnWaitIndicator()
+        status = "\(copy.agentExitedPrefix): \(reason)"
     }
 
     private func consumeOutput(_ data: Data) {
@@ -5206,6 +5237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var shortcutHotKeyEventHandler: EventHandlerRef?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        signal(SIGPIPE, SIG_IGN)
         Self.sharedDelegate = self
         applyApplicationIcon()
         NSApp.setActivationPolicy(.accessory)
