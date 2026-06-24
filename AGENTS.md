@@ -98,7 +98,7 @@ node --check Sources/QuietMenuBar/Resources/pi-agent/server.mjs
 open dist/Quiet.app
 ```
 
-After each code change, kill any previously running development/preview instance of Quiet, then start a fresh preview with `swift run quiet` so the user is always looking at the latest build. A normal foreground `swift run quiet` is fine for verification; do not force a persistent background runner unless the user asks. For this status-bar app, do not treat a short-lived background launch, `nohup swift run quiet`, or direct `.build/.../quiet` execution as a successful preview unless you verify the app process is still alive and the status-bar icon is visible. Do not launch the packaged `.app` for ordinary development previews, and do not leave stale dev processes running in the background.
+After each code change, kill any previously running development/preview instance of Quiet, then start a fresh preview with `swift run quiet` so the user is always looking at the latest build. A normal foreground `swift run quiet` is fine for quick verification; if the user wants to inspect the app, keep the new preview running instead of stopping it after verification. Use a persistent runner only when needed to leave the preview available after the agent response. For this status-bar app, do not treat a short-lived background launch, `nohup swift run quiet`, or direct `.build/.../quiet` execution as a successful preview unless you verify the app process is still alive and the status-bar icon is visible. Do not launch the packaged `.app` for ordinary development previews, and do not leave stale dev processes running in the background.
 
 If testing packaging, remember the packaged app launches its embedded Node from:
 
