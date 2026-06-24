@@ -2510,7 +2510,14 @@ struct QuietView: View {
                             }
 
                             if store.messages.isEmpty && !store.isLoadingHistory && !store.showTurnWaitIndicator {
-                                EmptyConversationHint(metrics: computerMetrics.snapshot)
+                                EmptyConversationHint(
+                                    metrics: computerMetrics.snapshot,
+                                    onPromptSelected: { prompt in
+                                        store.inputText = prompt
+                                        isInputFocused = true
+                                        NotificationCenter.default.post(name: .quietFocusComposer, object: nil)
+                                    }
+                                )
                                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                                     .padding(.bottom, 28)
                                     .transition(.opacity)
@@ -2923,20 +2930,28 @@ struct QuietView: View {
 
 struct EmptyConversationHint: View {
     let metrics: ComputerMetricsSnapshot
+    let onPromptSelected: (String) -> Void
 
     private let columns = [
         GridItem(.flexible(), spacing: 8),
         GridItem(.flexible(), spacing: 8),
     ]
 
+    private let promptSuggestions = [
+        "帮我将我的文件用 PARA 方法整理",
+        "看看我电脑上有哪些冗余文件占据了大量空间？",
+        "帮我看看有哪些应用占了大量内存？",
+        "帮我将所有音频文件改成用 IINA 打开",
+    ]
+
     var body: some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 12) {
             VStack(spacing: 5) {
                 Text("Quiet 电脑管家")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(quietChatText.opacity(0.9))
 
-                Text("问我哪些应用最占内存，或直接拖入文件整理。")
+                Text("拖入文件自动整理，或者让我帮你清理电脑存储空间")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(quietChatMutedText.opacity(0.86))
                     .multilineTextAlignment(.center)
@@ -2949,20 +2964,50 @@ struct EmptyConversationHint: View {
                 }
             }
 
-            HStack(spacing: 6) {
-                LucideIcon(id: "keyboard", fallbackSystemName: "keyboard")
-                    .frame(width: 14, height: 14)
-                    .foregroundStyle(quietChatMutedText.opacity(0.72))
-
-                Text("使用 `Alt` + `Space` 快捷唤出 `Quiet`")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(quietChatMutedText.opacity(0.78))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.85)
+            VStack(spacing: 6) {
+                ForEach(promptSuggestions, id: \.self) { prompt in
+                    PromptSuggestionButton(text: prompt) {
+                        onPromptSelected(prompt)
+                    }
+                }
             }
+            .padding(.top, 1)
+
         }
         .frame(maxWidth: 300)
         .padding(.horizontal, 18)
+    }
+}
+
+struct PromptSuggestionButton: View {
+    let text: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 7) {
+                LucideIcon(id: "message-circle", fallbackSystemName: "text.bubble")
+                    .frame(width: 13, height: 13)
+                    .foregroundStyle(quietChatMutedText.opacity(0.74))
+
+                Text(text)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(quietChatText.opacity(0.84))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+            .padding(.horizontal, 9)
+            .background(quietHoverFill.opacity(0.72), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(quietHairline.opacity(0.52), lineWidth: 0.5)
+            }
+        }
+        .buttonStyle(.plain)
+        .help(text)
     }
 }
 
